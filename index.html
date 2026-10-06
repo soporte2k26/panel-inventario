@@ -201,7 +201,7 @@
     <div class="tab active" data-view="licencias">LICENCIAS Y HERRAMIENTAS</div>
     <div class="tab" data-view="equipos">EQUIPOS ACTIVOS</div>
     <div class="tab" data-view="usuarios">USUARIOS — LICENCIAS GMAIL Y DROPBOX</div>
-    <div class="tab" data-view="sistemas">SISTEMAS</div>
+    <div class="tab" data-view="sistemas">SISTEMAS DE CREDENCIALES</div>
   </div>
 
   <div class="panel">
@@ -718,8 +718,9 @@ function openSysModal(existing){
   const s = existing || {id:uid('sys'), empresa:'', rubro:'', detalle:'', usuario:'', password:'', link:''};
   document.getElementById('modalBox').innerHTML = `
     <h3>${isEdit?'Editar':'Nueva'} credencial</h3>
-    <div class="field"><label>Empresa</label><input id="s_empresa" type="text" value="${esc(s.empresa)}"></div>
-    <div class="field"><label>Rubro / categoría</label><input id="s_rubro" type="text" value="${esc(s.rubro)}" placeholder="WiFi, iCloud, WordPress, VPS…"></div>
+    <div class="field"><label>Empresa</label><select id="s_empresa">${opcionesEmpresa(s.empresa)}</select></div>
+    <datalist id="dl_rubros">${[...new Set(['WiFi','Gmail','iCloud','Zoom','VPS','Hosting/Dominio','Pagina Web','SEO','CRM','ERP',...sistemas.map(x=>x.rubro)].filter(Boolean))].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="field"><label>Rubro / categoría</label><input id="s_rubro" type="text" list="dl_rubros" value="${esc(s.rubro)}" placeholder="WiFi, iCloud, WordPress, VPS…"></div>
     <div class="field"><label>Servicio / detalle</label><input id="s_detalle" type="text" value="${esc(s.detalle)}"></div>
     <div class="field"><label>Usuario</label><input id="s_usuario" type="text" value="${esc(s.usuario)}"></div>
     <div class="field"><label>Contraseña</label><input id="s_password" type="text" value="${esc(s.password)}"></div>
