@@ -92,6 +92,9 @@
   .lic-card .lic-emp{font-weight:700;font-size:13px;margin-bottom:8px;letter-spacing:.03em;}
   .lic-card .lic-row{display:flex;gap:16px;} .lic-card .lic-row .num{font-size:24px;}
   .lic-card .lic-plan{font-size:10.5px;color:var(--ink-soft);margin-top:6px;line-height:1.4;}
+  .res-line{font-size:12px;margin-top:4px;} .res-line b{font-size:15px;font-family:Georgia,serif;}
+  .neg{color:var(--rust);font-weight:700;} .pos{color:var(--teal);font-weight:700;}
+  .eq-resumen{border:1px solid var(--rule);background:var(--paper-dark);padding:10px 14px;margin:-8px 0 18px;font-size:13px;}
   tr.grupo td{background:var(--paper-dark);font-weight:700;letter-spacing:.04em;font-size:12px;}
   .stat .num{font-size:26px;font-weight:700;font-family:"Georgia",serif;}
   .stat .lbl{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;}
@@ -198,7 +201,7 @@
   <div class="meta-row" id="metaRow"></div>
 
   <div class="tabs">
-    <div class="tab active" data-view="licencias">LICENCIAS Y HERRAMIENTAS</div>
+    <div class="tab active" data-view="licencias">RESUMEN Y LICENCIAS POR EMPRESA</div>
     <div class="tab" data-view="equipos">EQUIPOS ACTIVOS</div>
     <div class="tab" data-view="usuarios">USUARIOS — LICENCIAS GMAIL Y DROPBOX</div>
     <div class="tab" data-view="sistemas">SISTEMAS DE CREDENCIALES</div>
@@ -211,14 +214,14 @@
       <div class="stats" id="licStats"></div>
       <div class="controls">
         <select id="licEmpresaFilter"><option value="">Todas las empresas</option></select>
-        <input type="text" id="licSearch" placeholder="Buscar por nombre o proveedor…">
+        <input type="text" id="licSearch" placeholder="Buscar herramienta o proveedor…">
         <button id="btnAddLic">+ Nueva licencia</button>
       </div>
       <div class="table-scroll">
         <table>
           <thead><tr>
-            <th>Herramienta</th><th>Proveedor</th><th>Empresa</th><th>Asientos</th>
-            <th>Costo</th><th>Frecuencia</th><th>Categoría</th><th></th>
+            <th>Herramienta</th><th>Proveedor</th><th>Contratadas</th><th>En uso</th><th>Disponibles</th>
+            <th>Costo</th><th>Frecuencia</th><th>Notas</th><th></th>
           </tr></thead>
           <tbody id="licTbody"></tbody>
         </table>
@@ -228,6 +231,7 @@
     <!-- EQUIPOS VIEW -->
     <div id="view-equipos" style="display:none;">
       <div class="stats" id="eqStats"></div>
+      <div class="eq-resumen" id="eqResumen" style="display:none;"></div>
       <div class="controls">
         <select id="eqOrigenFilter">
           <option value="">Todo el inventario</option>
@@ -412,16 +416,43 @@ function fillSelect(sel, values){
 }
 
 /* ---------- LICENSES ---------- */
+function enUsoLic(l){
+  const txt = ((l.nombre||'')+' '+(l.proveedor||'')).toLowerCase();
+  const us = usuarios.filter(u=>u.empresa===l.empresa);
+  if(/google|gmail|workspace/.test(txt)) return us.filter(tieneGmail).length;
+  if(/dropbox/.test(txt)) return us.filter(tieneDropbox).length;
+  return null;
+}
+function resumenEmpresa(emp){
+  const us = usuarios.filter(u=>u.empresa===emp);
+  const eqs = equipo.filter(x=>x.empresa===emp);
+  const lics = licenses.filter(l=>l.empresa===emp);
+  const contratadas = re => lics.filter(l=>re.test(((l.nombre||'')+' '+(l.proveedor||'')).toLowerCase())).reduce((a,l)=>a+(parseInt(l.asientos)||0),0);
+  return {
+    usuarios: us.length, gmail: us.filter(tieneGmail).length, dropbox: us.filter(tieneDropbox).length,
+    gmailContr: contratadas(/google|gmail|workspace/), dropboxContr: contratadas(/dropbox/),
+    equipos: eqs.length, asignados: eqs.filter(x=>(x.origen||'Activos')==='Activos').length,
+    personasConEquipo: new Set(eqs.filter(x=>(x.origen||'Activos')==='Activos').map(x=>(x.usuario||'').toLowerCase()).filter(Boolean)).size,
+    herramientas: lics.length
+  };
+}
 function renderLicStats(){
-  const totalSeats = licenses.reduce((a,l)=>a+(parseInt(l.asientos)||0),0);
-  const empresas = new Set(licenses.map(l=>l.empresa)).size;
-  const herramientas = new Set(licenses.map(l=>l.nombre)).size;
-  document.getElementById('licStats').innerHTML = `
-    <div class="stat"><div class="num">${licenses.length}</div><div class="lbl">Licencias registradas</div></div>
-    <div class="stat"><div class="num">${totalSeats}</div><div class="lbl">Asientos totales</div></div>
-    <div class="stat"><div class="num">${herramientas}</div><div class="lbl">Herramientas distintas</div></div>
-    <div class="stat"><div class="num">${empresas}</div><div class="lbl">Empresas cubiertas</div></div>
-  `;
+  const sel = document.getElementById('licEmpresaFilter').value;
+  document.getElementById('licStats').innerHTML = EMPRESAS.map(emp=>{
+    const r = resumenEmpresa(emp);
+    const cls = (uso, con) => con && uso > con ? 'neg' : '';
+    return `<div class="stat lic-card ${sel===emp?'sel':''}" onclick="filtrarLicEmpresa('${emp}')">
+      <div class="lic-emp">${esc(emp.toUpperCase())}</div>
+      <div class="res-line"><b>${r.equipos}</b> equipos &nbsp;·&nbsp; <b>${r.usuarios}</b> usuarios</div>
+      <div class="res-line">Gmail: <b class="${cls(r.gmail,r.gmailContr)}">${r.gmail}</b> en uso / ${r.gmailContr} contratadas</div>
+      <div class="res-line">Dropbox: <b class="${cls(r.dropbox,r.dropboxContr)}">${r.dropbox}</b> en uso / ${r.dropboxContr} contratadas</div>
+      <div class="lic-plan">${r.herramientas} herramienta(s) registrada(s)</div>
+    </div>`;
+  }).join('');
+}
+window.filtrarLicEmpresa = function(emp){
+  const s = document.getElementById('licEmpresaFilter'); s.value = (s.value===emp) ? '' : emp;
+  renderLicStats(); renderLicTable();
 }
 
 function renderLicTable(){
@@ -430,25 +461,34 @@ function renderLicTable(){
   const tbody = document.getElementById('licTbody');
   const rows = licenses.filter(l=>{
     if(empresaF && l.empresa !== empresaF) return false;
-    if(q && !(l.nombre.toLowerCase().includes(q) || (l.proveedor||'').toLowerCase().includes(q))) return false;
+    if(q && !((l.nombre||'').toLowerCase().includes(q) || (l.proveedor||'').toLowerCase().includes(q))) return false;
     return true;
   });
-  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="8" class="empty">Sin resultados. Ajusta el filtro o agrega una licencia.</td></tr>`; return; }
-  tbody.innerHTML = rows.map(l=>`
+  const grupos = empresaF ? [empresaF] : [...EMPRESAS, ...[...new Set(rows.map(l=>l.empresa))].filter(e=>!EMPRESAS.includes(e))];
+  tbody.innerHTML = grupos.map(emp=>{
+    const ls = rows.filter(l=>l.empresa===emp).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+    const r = resumenEmpresa(emp);
+    const cab = `<tr class="grupo"><td colspan="9">${esc((emp||'Sin empresa').toUpperCase())} &nbsp;·&nbsp; ${r.equipos} equipos &nbsp;·&nbsp; ${r.usuarios} usuarios &nbsp;·&nbsp; Gmail ${r.gmail}/${r.gmailContr} &nbsp;·&nbsp; Dropbox ${r.dropbox}/${r.dropboxContr}</td></tr>`;
+    if(!ls.length) return (q ? '' : cab + `<tr><td colspan="9" class="empty" style="padding:14px;">Sin licencias registradas para ${esc(emp)}. Usa “+ Nueva licencia”.</td></tr>`);
+    return cab + ls.map(l=>{
+      const uso = enUsoLic(l); const con = parseInt(l.asientos);
+      const disp = (uso!==null && !isNaN(con)) ? con - uso : null;
+      return `
     <tr>
       <td><b>${esc(l.nombre)}</b></td>
       <td>${esc(l.proveedor||'—')}</td>
-      <td><span class="tag">${esc(l.empresa)}</span></td>
       <td class="mono">${esc(l.asientos||'—')}</td>
+      <td class="mono">${uso===null ? '—' : uso}</td>
+      <td class="mono ${disp===null?'':(disp<0?'neg':'pos')}">${disp===null ? '—' : (disp<0 ? disp+' (faltan)' : disp)}</td>
       <td class="mono">${esc(l.costo||'—')}</td>
       <td>${esc(l.frecuencia||'—')}</td>
-      <td>${esc(l.categoria||'—')}</td>
+      <td style="font-size:11px;">${esc(l.notas||'')}</td>
       <td class="row-actions">
         <button class="secondary" onclick="editLic('${l.id}')">Editar</button>
         <button class="danger" onclick="delLic('${l.id}')">Eliminar</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;}).join('');
+  }).join('') || `<tr><td colspan="9" class="empty">Sin resultados.</td></tr>`;
 }
 
 function esc(s){ return (s===undefined||s===null) ? '' : String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -463,13 +503,13 @@ window.delLic = async function(id){
 
 function openLicModal(existing){
   const isEdit = !!existing;
-  const l = existing || {id:uid('l'), nombre:'', proveedor:'', empresa:'', asientos:'', costo:'', frecuencia:'Anual', categoria:'Software'};
+  const l = existing || {id:uid('l'), nombre:'', proveedor:'', empresa:document.getElementById('licEmpresaFilter').value, asientos:'', costo:'', frecuencia:'Anual', categoria:'Software', notas:''};
   document.getElementById('modalBox').innerHTML = `
     <h3>${isEdit?'Editar':'Nueva'} licencia / herramienta</h3>
     <div class="field"><label>Nombre de la herramienta</label><input id="f_nombre" type="text" value="${esc(l.nombre)}" placeholder="Ej. Figma, Slack, Google Workspace"></div>
     <div class="field"><label>Proveedor</label><input id="f_proveedor" type="text" value="${esc(l.proveedor)}"></div>
-    <div class="field"><label>Empresa</label><input id="f_empresa" type="text" value="${esc(l.empresa)}" placeholder="Haus Panama, Semah Group…"></div>
-    <div class="field"><label>Asientos / licencias</label><input id="f_asientos" type="text" value="${esc(l.asientos)}"></div>
+    <div class="field"><label>Empresa</label><select id="f_empresa">${opcionesEmpresa(l.empresa)}</select></div>
+    <div class="field"><label>Licencias contratadas</label><input id="f_asientos" type="number" min="0" value="${esc(l.asientos)}"></div>
     <div class="field"><label>Costo (opcional)</label><input id="f_costo" type="text" value="${esc(l.costo)}" placeholder="Ej. $12/mes"></div>
     <div class="field"><label>Frecuencia de pago</label>
       <select id="f_frecuencia">
@@ -477,6 +517,7 @@ function openLicModal(existing){
       </select>
     </div>
     <div class="field"><label>Categoría</label><input id="f_categoria" type="text" value="${esc(l.categoria)}" placeholder="Software, Hosting, Diseño…"></div>
+    <div class="field"><label>Notas</label><input id="f_notas" type="text" value="${esc(l.notas||'')}"></div>
     <div class="modal-actions">
       <button class="secondary" onclick="closeModal()">Cancelar</button>
       <button onclick="saveLic('${l.id}', ${isEdit})">Guardar</button>
@@ -490,15 +531,17 @@ window.saveLic = async function(id, isEdit){
     id,
     nombre: document.getElementById('f_nombre').value.trim(),
     proveedor: document.getElementById('f_proveedor').value.trim(),
-    empresa: document.getElementById('f_empresa').value.trim(),
+    empresa: document.getElementById('f_empresa').value,
     asientos: document.getElementById('f_asientos').value.trim(),
     costo: document.getElementById('f_costo').value.trim(),
     frecuencia: document.getElementById('f_frecuencia').value,
     categoria: document.getElementById('f_categoria').value.trim(),
+    notas: document.getElementById('f_notas').value.trim(),
   };
   if(!data.nombre){ alert('El nombre es obligatorio'); return; }
+  if(!data.empresa){ alert('Elige la empresa'); return; }
   if(isEdit){
-    licenses = licenses.map(l=>l.id===id?data:l);
+    licenses = licenses.map(l=>l.id===id?{...l, ...data}:l);
   } else {
     licenses.push(data);
   }
@@ -508,18 +551,24 @@ window.saveLic = async function(id, isEdit){
 
 /* ---------- EQUIPOS ---------- */
 function renderEqStats(){
-  const empresas = new Set(equipo.map(e=>e.empresa)).size;
-  const activos = equipo.filter(e=>(e.origen||'Activos')==='Activos').length;
-  const cuartoIT = equipo.filter(e=>e.origen==='Cuarto IT').length;
-  const redes = equipo.filter(e=>e.origen==='Redes').length;
-  const proyectos = equipo.filter(e=>e.origen==='IT Proyectos').length;
+  const empF = document.getElementById('eqEmpresaFilter').value;
+  const base = empF ? equipo.filter(x=>x.empresa===empF) : equipo;
+  const n = o => base.filter(x=>(x.origen||'Activos')===o).length;
+  const us = empF ? usuarios.filter(u=>u.empresa===empF) : usuarios;
+  const personas = new Set(base.filter(x=>(x.origen||'Activos')==='Activos').map(x=>(x.usuario||'').toLowerCase()).filter(Boolean)).size;
   document.getElementById('eqStats').innerHTML = `
-    <div class="stat"><div class="num">${equipo.length}</div><div class="lbl">Total inventario</div></div>
-    <div class="stat"><div class="num">${activos}</div><div class="lbl">Activos (asignados)</div></div>
-    <div class="stat"><div class="num">${cuartoIT}</div><div class="lbl">Cuarto IT (bodega)</div></div>
-    <div class="stat"><div class="num">${redes}</div><div class="lbl">Redes</div></div>
-    <div class="stat"><div class="num">${proyectos}</div><div class="lbl">IT Proyectos</div></div>
+    <div class="stat"><div class="num">${base.length}</div><div class="lbl">${empF ? 'Equipos de '+esc(empF) : 'Total inventario'}</div></div>
+    <div class="stat"><div class="num">${n('Activos')}</div><div class="lbl">Activos (asignados)</div></div>
+    <div class="stat"><div class="num">${n('Cuarto IT')}</div><div class="lbl">Cuarto IT (bodega)</div></div>
+    <div class="stat"><div class="num">${n('Redes')}</div><div class="lbl">Redes</div></div>
+    <div class="stat"><div class="num">${n('IT Proyectos')}</div><div class="lbl">IT Proyectos</div></div>
+    <div class="stat"><div class="num">${us.length}</div><div class="lbl">Usuarios registrados</div></div>
   `;
+  const box = document.getElementById('eqResumen');
+  if(!empF){ box.style.display='none'; return; }
+  const r = resumenEmpresa(empF);
+  box.style.display='';
+  box.innerHTML = `<b>${esc(empF.toUpperCase())}</b> &nbsp;·&nbsp; ${r.equipos} equipos (${r.asignados} asignados a ${personas} personas) &nbsp;·&nbsp; <b>${r.usuarios}</b> usuarios registrados &nbsp;·&nbsp; Gmail ${r.gmail} en uso / ${r.gmailContr} contratadas &nbsp;·&nbsp; Dropbox ${r.dropbox} en uso / ${r.dropboxContr} contratadas`;
 }
 
 function renderEqTable(){
@@ -633,22 +682,42 @@ window.closeModal = function(){ document.getElementById('overlay').classList.rem
 document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeModal(); });
 
 /* ---------- refresh / wiring ---------- */
+function selectEmpresas(id){
+  const s = document.getElementById(id); const v = s.value;
+  s.querySelectorAll('option:not(:first-child)').forEach(o=>o.remove());
+  EMPRESAS.forEach(e=>{ const o=document.createElement('option'); o.value=e; o.textContent=e; s.appendChild(o); });
+  s.value = v;
+}
+function actualizarMeta(){
+  const el = document.getElementById('metaRow'); if(!el) return;
+  el.innerHTML = `
+    <span><b>5</b> empresas</span>
+    <span><b>${equipo.length}</b> equipos</span>
+    <span><b>${usuarios.length}</b> usuarios</span>
+    <span><b>${usuarios.filter(tieneGmail).length}</b> Gmail · <b>${usuarios.filter(tieneDropbox).length}</b> Dropbox en uso</span>
+    <span><b>${licenses.length}</b> licencias/herramientas</span>
+    <span><b>${sistemas.length}</b> credenciales</span>`;
+}
+/* Mantiene todas las pestañas sincronizadas después de cualquier cambio */
+function sincronizar(){
+  try{ actualizarMeta(); renderLicStats(); renderLicTable(); renderEqStats(); renderUserStats(); }catch(e){ console.error(e); }
+}
 function refreshLicUI(){
-  fillSelect(document.getElementById('licEmpresaFilter'), licenses.map(l=>l.empresa));
-  renderLicStats(); renderLicTable();
+  selectEmpresas('licEmpresaFilter');
+  sincronizar();
 }
 function refreshEqUI(){
-  fillSelect(document.getElementById('eqEmpresaFilter'), equipo.map(e=>e.empresa));
+  selectEmpresas('eqEmpresaFilter');
   fillSelect(document.getElementById('eqEstadoFilter'), equipo.map(e=>e.estado));
-  renderEqStats(); renderEqTable();
+  renderEqTable(); sincronizar();
 }
 
 document.getElementById('btnAddLic').onclick = ()=>openLicModal(null);
 document.getElementById('btnAddEq').onclick = ()=>openEqModal(null);
-document.getElementById('licEmpresaFilter').onchange = renderLicTable;
+document.getElementById('licEmpresaFilter').onchange = ()=>{ renderLicStats(); renderLicTable(); };
 document.getElementById('licSearch').oninput = renderLicTable;
 document.getElementById('eqOrigenFilter').onchange = renderEqTable;
-document.getElementById('eqEmpresaFilter').onchange = renderEqTable;
+document.getElementById('eqEmpresaFilter').onchange = ()=>{ renderEqStats(); renderEqTable(); };
 document.getElementById('eqEstadoFilter').onchange = renderEqTable;
 document.getElementById('eqSearch').oninput = renderEqTable;
 
@@ -752,7 +821,7 @@ window.saveSys = async function(id, isEdit){
 function refreshSysUI(){
   fillSelect(document.getElementById('sysEmpresaFilter'), sistemas.map(s=>s.empresa));
   fillSelect(document.getElementById('sysRubroFilter'), sistemas.map(s=>s.rubro));
-  renderSysStats(); renderSysTable();
+  renderSysStats(); renderSysTable(); if(typeof sincronizar==='function') sincronizar();
 }
 document.getElementById('sysEmpresaFilter').onchange = renderSysTable;
 document.getElementById('sysRubroFilter').onchange = renderSysTable;
@@ -836,7 +905,7 @@ function refreshUserUI(){
   s.querySelectorAll('option:not(:first-child)').forEach(o=>o.remove());
   EMPRESAS.forEach(e=>{ const o=document.createElement('option'); o.value=e; o.textContent=e; s.appendChild(o); });
   s.value = v;
-  renderUserStats(); renderUserTable();
+  renderUserStats(); renderUserTable(); sincronizar();
 }
 window.editUser = function(id){ openUserModal(usuarios.find(u=>u.id===id)); }
 window.delUser = async function(id){
@@ -950,13 +1019,7 @@ async function init(){
   sistemas = await Storage.get('sistemas', null);
   if(sistemas === null){ sistemas = SISTEMAS_SEED; if(!readOnly) await Storage.set('sistemas', sistemas); }
 
-  document.getElementById('metaRow').innerHTML = `
-    <span><b>${licenses.length}</b> licencias/herramientas</span>
-    <span><b>${equipo.length}</b> equipos activos</span>
-    <span><b>${usuarios.length}</b> usuarios únicos</span>
-    <span><b>${sistemas.length}</b> credenciales de sistemas</span>
-    <span>Datos base: Google Workspace + Dropbox + Inventario IT 2026</span>
-  `;
+  actualizarMeta();
   refreshLicUI(); refreshEqUI(); refreshUserUI(); refreshSysUI();
   if(readOnly){ setSync('off'); toast('⚠ No hay conexión con la base de datos: los cambios no se guardarán'); }
   else setSync('ok','● Conectado a la nube');
