@@ -130,7 +130,10 @@
     display:inline-block;
   }
   .tag.rust{background:#F3E1D6;color:var(--rust);}
-  .row-actions{white-space:nowrap;}
+  .row-actions{white-space:nowrap;position:sticky;right:0;background:var(--white);box-shadow:-8px 0 8px -8px rgba(0,0,0,.25);z-index:1;}
+  tr:hover td.row-actions{background:var(--amber-dim);}
+  thead th:last-child{right:0;z-index:2;}
+  tbody tr{cursor:pointer;}
   .row-actions button{padding:4px 8px;font-size:11px;margin-right:4px;}
   .empty{padding:40px 10px;text-align:center;color:var(--ink-soft);}
 
@@ -887,6 +890,12 @@ window.saveUser = async function(id, isEdit){
   closeModal(); refreshUserUI(); if(ok) toast('Guardado ✓');
 }
 document.getElementById('btnAddUser').onclick = ()=>openUserModal(null);
+/* Clic en cualquier fila = abrir Editar (los botones siguen funcionando igual) */
+document.addEventListener('click', function(e){
+  if(e.target.closest('button, a, input, select, textarea, .overlay')) return;
+  const tr = e.target.closest('tbody tr'); if(!tr) return;
+  const b = tr.querySelector('.row-actions button.secondary'); if(b) b.click();
+});
 document.getElementById('userEmpresaFilter').onchange = ()=>{ renderUserStats(); renderUserTable(); };
 document.getElementById('userLicFilter').onchange = renderUserTable;
 document.getElementById('userSearch').oninput = renderUserTable;
