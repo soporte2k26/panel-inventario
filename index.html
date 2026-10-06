@@ -88,6 +88,11 @@
   .stats{display:flex;gap:0;margin-bottom:20px;border:1px solid var(--rule);}
   .stat{flex:1;padding:14px 18px;border-right:1px solid var(--rule);}
   .stat:last-child{border-right:none;}
+  .lic-card{cursor:pointer;} .lic-card.sel{background:var(--paper-dark);}
+  .lic-card .lic-emp{font-weight:700;font-size:13px;margin-bottom:8px;letter-spacing:.03em;}
+  .lic-card .lic-row{display:flex;gap:16px;} .lic-card .lic-row .num{font-size:24px;}
+  .lic-card .lic-plan{font-size:10.5px;color:var(--ink-soft);margin-top:6px;line-height:1.4;}
+  tr.grupo td{background:var(--paper-dark);font-weight:700;letter-spacing:.04em;font-size:12px;}
   .stat .num{font-size:26px;font-weight:700;font-family:"Georgia",serif;}
   .stat .lbl{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;}
 
@@ -192,7 +197,7 @@
   <div class="tabs">
     <div class="tab active" data-view="licencias">LICENCIAS Y HERRAMIENTAS</div>
     <div class="tab" data-view="equipos">EQUIPOS ACTIVOS</div>
-    <div class="tab" data-view="usuarios">USUARIOS (CORREO + DROPBOX)</div>
+    <div class="tab" data-view="usuarios">USUARIOS — LICENCIAS GMAIL Y DROPBOX</div>
     <div class="tab" data-view="sistemas">SISTEMAS</div>
   </div>
 
@@ -250,9 +255,12 @@
         <select id="userEmpresaFilter"><option value="">Todas las empresas</option></select>
         <select id="userLicFilter">
           <option value="">Todas las licencias</option>
-          <option value="ambas">Tiene Google Workspace + Dropbox</option>
-          <option value="solo-gw">Solo Google Workspace</option>
+          <option value="gmail">Con licencia Gmail</option>
+          <option value="dropbox">Con licencia Dropbox</option>
+          <option value="ambas">Gmail y Dropbox</option>
+          <option value="solo-gw">Solo Gmail</option>
           <option value="solo-db">Solo Dropbox</option>
+          <option value="ninguna">Sin licencias</option>
         </select>
         <input type="text" id="userSearch" placeholder="Buscar por nombre o correo…">
         <button id="btnAddUser">+ Nuevo usuario</button>
@@ -260,8 +268,8 @@
       <div class="table-scroll">
         <table>
           <thead><tr>
-            <th>Nombre</th><th>Apellido</th><th>Correo</th><th>Empresa</th>
-            <th>Google Workspace</th><th>Dropbox</th><th></th>
+            <th>Nombre</th><th>Apellido</th><th>Correo</th>
+            <th>Licencia Gmail</th><th>Dropbox</th><th></th>
           </tr></thead>
           <tbody id="userTbody"></tbody>
         </table>
@@ -575,7 +583,7 @@ function openEqModal(existing){
     <div class="field"><label>RAM</label><input id="g_ram" type="text" value="${esc(e.ram)}" placeholder="Ej. 16 GB"></div>
     <div class="field"><label>Disco</label><input id="g_disco" type="text" value="${esc(e.disco)}" placeholder="Ej. 512 SSD"></div>
     <div class="field"><label>Ubicación</label><input id="g_ubicacion" type="text" value="${esc(e.ubicacion)}" placeholder="Ej. Oficina Haus, Bodega, Obra Siena…"></div>
-    <div class="field"><label>Empresa</label><input id="g_empresa" type="text" list="dl_empresas" value="${esc(e.empresa)}"></div>
+    <div class="field"><label>Empresa</label><select id="g_empresa">${opcionesEmpresa(e.empresa)}</select></div>
     <div class="field"><label>Estado</label><input id="g_estado" type="text" list="dl_estados" value="${esc(e.estado)}" placeholder="Asignado, En bodega, Dañado…"></div>
     <div class="field"><label>Origen</label><select id="g_origen">${['Activos','Cuarto IT','Redes','IT Proyectos'].map(o=>`<option ${ (e.origen||'Activos')===o?'selected':''}>${o}</option>`).join('')}</select></div>
     <datalist id="dl_empresas">${[...new Set(['Semah','Haus','Semah Properties','Colinas','Almacenajes',...equipo.map(x=>x.empresa)].filter(Boolean))].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
@@ -604,7 +612,7 @@ window.saveEq = async function(id, isEdit){
     disco: document.getElementById('g_disco').value.trim(),
     origen: document.getElementById('g_origen').value,
     ubicacion: document.getElementById('g_ubicacion').value.trim(),
-    empresa: document.getElementById('g_empresa').value.trim(),
+    empresa: document.getElementById('g_empresa').value,
     estado: document.getElementById('g_estado').value.trim(),
     notas: document.getElementById('g_notas').value.trim(),
   };
@@ -757,17 +765,30 @@ document.getElementById('btnTogglePw').onclick = function(){
 
 
 let usuarios = [];
+const EMPRESAS = ['Almacenajes','Colinas','Haus','Semah','Semah Properties'];
+const tieneGmail = u => !!(u.googleWorkspace && String(u.googleWorkspace).trim());
+const tieneDropbox = u => !!(u.dropbox && String(u.dropbox).trim() && !/^no$/i.test(u.dropbox));
+const planCorto = p => { p = String(p||''); if(/standar/i.test(p)) return 'Business Standard'; if(/starter/i.test(p)) return 'Business Starter'; return p ? p.slice(0,30) : ''; };
 
 function renderUserStats(){
-  const ambas = usuarios.filter(u=>u.googleWorkspace && u.dropbox).length;
-  const soloGw = usuarios.filter(u=>u.googleWorkspace && !u.dropbox).length;
-  const soloDb = usuarios.filter(u=>!u.googleWorkspace && u.dropbox).length;
-  document.getElementById('userStats').innerHTML = `
-    <div class="stat"><div class="num">${usuarios.length}</div><div class="lbl">Personas únicas</div></div>
-    <div class="stat"><div class="num">${ambas}</div><div class="lbl">Con Google Workspace + Dropbox</div></div>
-    <div class="stat"><div class="num">${soloGw}</div><div class="lbl">Solo Google Workspace</div></div>
-    <div class="stat"><div class="num">${soloDb}</div><div class="lbl">Solo Dropbox</div></div>
-  `;
+  const sel = document.getElementById('userEmpresaFilter').value;
+  document.getElementById('userStats').innerHTML = EMPRESAS.map(emp=>{
+    const us = usuarios.filter(u=>u.empresa===emp);
+    const g = us.filter(tieneGmail), d = us.filter(tieneDropbox);
+    const planes = {}; g.forEach(u=>{ const p = planCorto(u.gmailPlan) || 'Plan sin registrar'; planes[p]=(planes[p]||0)+1; });
+    return `<div class="stat lic-card ${sel===emp?'sel':''}" onclick="filtrarEmpresaLic('${emp}')">
+      <div class="lic-emp">${esc(emp.toUpperCase())}</div>
+      <div class="lic-row">
+        <div><div class="num">${g.length}</div><div class="lbl">Gmail</div></div>
+        <div><div class="num">${d.length}</div><div class="lbl">Dropbox</div></div>
+      </div>
+      <div class="lic-plan">${Object.entries(planes).map(([p,n])=>`${n} × ${esc(p)}`).join('<br>') || 'Sin licencias Gmail'}</div>
+    </div>`;
+  }).join('');
+}
+window.filtrarEmpresaLic = function(emp){
+  const s = document.getElementById('userEmpresaFilter'); s.value = (s.value===emp) ? '' : emp;
+  renderUserStats(); renderUserTable();
 }
 
 function renderUserTable(){
@@ -776,32 +797,43 @@ function renderUserTable(){
   const q = document.getElementById('userSearch').value.trim().toLowerCase();
   const tbody = document.getElementById('userTbody');
   const rows = usuarios.filter(u=>{
+    const g = tieneGmail(u), d = tieneDropbox(u);
     if(empresaF && u.empresa !== empresaF) return false;
-    if(licF==='ambas' && !(u.googleWorkspace && u.dropbox)) return false;
-    if(licF==='solo-gw' && !(u.googleWorkspace && !u.dropbox)) return false;
-    if(licF==='solo-db' && !(!u.googleWorkspace && u.dropbox)) return false;
-    if(q && !((u.nombre+' '+u.apellido).toLowerCase().includes(q) || u.correo.toLowerCase().includes(q))) return false;
+    if(licF==='gmail' && !g) return false;
+    if(licF==='dropbox' && !d) return false;
+    if(licF==='ambas' && !(g && d)) return false;
+    if(licF==='solo-gw' && !(g && !d)) return false;
+    if(licF==='solo-db' && !(!g && d)) return false;
+    if(licF==='ninguna' && (g || d)) return false;
+    if(q && !(((u.nombre||'')+' '+(u.apellido||'')).toLowerCase().includes(q) || (u.correo||'').toLowerCase().includes(q))) return false;
     return true;
   });
-  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="7" class="empty">Sin resultados.</td></tr>`; return; }
-  tbody.innerHTML = rows.map(u=>`
+  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="6" class="empty">Sin resultados.</td></tr>`; return; }
+  const grupos = [...EMPRESAS, ...[...new Set(rows.map(u=>u.empresa))].filter(e=>!EMPRESAS.includes(e))];
+  tbody.innerHTML = grupos.map(emp=>{
+    const us = rows.filter(u=>u.empresa===emp).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+    if(!us.length) return '';
+    return `<tr class="grupo"><td colspan="6">${esc((emp||'Sin empresa').toUpperCase())} &nbsp;·&nbsp; Gmail: ${us.filter(tieneGmail).length} &nbsp;·&nbsp; Dropbox: ${us.filter(tieneDropbox).length} &nbsp;·&nbsp; ${us.length} usuarios</td></tr>` +
+    us.map(u=>`
     <tr>
       <td><b>${esc(u.nombre)}</b></td>
       <td>${esc(u.apellido)}</td>
       <td class="mono" style="font-size:11px;">${esc(u.correo)}</td>
-      <td><span class="tag">${esc(u.empresa)}</span></td>
-      <td>${u.googleWorkspace ? `<span class="tag">${esc(u.googleWorkspace)}</span>` : '—'}</td>
-      <td>${u.dropbox ? `<span class="tag rust">Sí</span>` : '—'}</td>
+      <td>${tieneGmail(u) ? `<span class="tag">${esc(planCorto(u.gmailPlan) || 'Sí')}</span>` : '—'}</td>
+      <td>${tieneDropbox(u) ? `<span class="tag rust">Sí</span>` : '—'}</td>
       <td class="row-actions">
         <button class="secondary" onclick="editUser('${u.id}')">Editar</button>
         <button class="danger" onclick="delUser('${u.id}')">Eliminar</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`).join('');
+  }).join('');
 }
 
 function refreshUserUI(){
-  fillSelect(document.getElementById('userEmpresaFilter'), usuarios.map(u=>u.empresa));
+  const s = document.getElementById('userEmpresaFilter'); const v = s.value;
+  s.querySelectorAll('option:not(:first-child)').forEach(o=>o.remove());
+  EMPRESAS.forEach(e=>{ const o=document.createElement('option'); o.value=e; o.textContent=e; s.appendChild(o); });
+  s.value = v;
   renderUserStats(); renderUserTable();
 }
 window.editUser = function(id){ openUserModal(usuarios.find(u=>u.id===id)); }
@@ -811,18 +843,23 @@ window.delUser = async function(id){
   const ok = await Storage.set('usuarios', usuarios);
   refreshUserUI(); if(ok) toast('Usuario eliminado');
 }
+function opcionesEmpresa(actual){
+  const lista = EMPRESAS.includes(actual) || !actual ? EMPRESAS : [...EMPRESAS, actual];
+  return `<option value="">— Elegir —</option>` + lista.map(e=>`<option ${e===actual?'selected':''}>${esc(e)}</option>`).join('');
+}
 function openUserModal(existing){
   const isEdit = !!existing;
-  const u = existing || {id:uid('u'), nombre:'', apellido:'', correo:'', empresa:'', googleWorkspace:'', dropbox:''};
+  const u = existing || {id:uid('u'), nombre:'', apellido:'', correo:'', empresa:document.getElementById('userEmpresaFilter').value, googleWorkspace:'', gmailPlan:'', dropbox:''};
   document.getElementById('modalBox').innerHTML = `
     <h3>${isEdit?'Editar':'Nuevo'} usuario</h3>
     <div class="field"><label>Nombre</label><input id="u_nombre" type="text" value="${esc(u.nombre)}"></div>
     <div class="field"><label>Apellido</label><input id="u_apellido" type="text" value="${esc(u.apellido)}"></div>
     <div class="field"><label>Correo</label><input id="u_correo" type="text" value="${esc(u.correo)}"></div>
-    <div class="field"><label>Empresa</label><input id="u_empresa" type="text" list="dl_uempresas" value="${esc(u.empresa)}"></div>
-    <datalist id="dl_uempresas">${[...new Set(usuarios.map(x=>x.empresa).filter(Boolean))].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
-    <div class="field"><label>Google Workspace (vacío = no tiene)</label><input id="u_gw" type="text" value="${esc(u.googleWorkspace)}" placeholder="Ej. Haus, Semah"></div>
-    <div class="field"><label>Dropbox</label><select id="u_db"><option value="">No</option><option value="Sí" ${u.dropbox?'selected':''}>Sí</option></select></div>
+    <div class="field"><label>Empresa</label><select id="u_empresa">${opcionesEmpresa(u.empresa)}</select></div>
+    <div class="field"><label>Licencia Gmail (Google Workspace)</label><select id="u_gw"><option value="">No</option><option value="Sí" ${tieneGmail(u)?'selected':''}>Sí</option></select></div>
+    <div class="field"><label>Plan Gmail</label><input id="u_plan" type="text" list="dl_planes" value="${esc(u.gmailPlan||'')}" placeholder="Business Starter, Business Standard…"></div>
+    <datalist id="dl_planes"><option value="Business Starter 30GB"><option value="Business Standard 2TB"><option value="Business Plus 5TB"></datalist>
+    <div class="field"><label>Licencia Dropbox</label><select id="u_db"><option value="">No</option><option value="Sí" ${tieneDropbox(u)?'selected':''}>Sí</option></select></div>
     <div class="modal-actions">
       <button class="secondary" onclick="closeModal()">Cancelar</button>
       <button onclick="saveUser('${u.id}', ${isEdit})">Guardar</button>
@@ -830,22 +867,27 @@ function openUserModal(existing){
   showModal();
 }
 window.saveUser = async function(id, isEdit){
+  const previo = usuarios.find(u=>u.id===id) || {};
+  const empresa = document.getElementById('u_empresa').value;
+  const gw = document.getElementById('u_gw').value;
   const data = {
     id,
     nombre: document.getElementById('u_nombre').value.trim(),
     apellido: document.getElementById('u_apellido').value.trim(),
     correo: document.getElementById('u_correo').value.trim(),
-    empresa: document.getElementById('u_empresa').value.trim(),
-    googleWorkspace: document.getElementById('u_gw').value.trim(),
+    empresa,
+    googleWorkspace: gw ? (tieneGmail(previo) ? previo.googleWorkspace : (empresa || 'Sí')) : '',
+    gmailPlan: gw ? document.getElementById('u_plan').value.trim() : '',
     dropbox: document.getElementById('u_db').value,
   };
   if(!data.nombre){ alert('El nombre es obligatorio'); return; }
+  if(!data.empresa){ alert('Elige la empresa'); return; }
   usuarios = isEdit ? usuarios.map(u=>u.id===id?{...u, ...data}:u) : [...usuarios, data];
   const ok = await Storage.set('usuarios', usuarios);
   closeModal(); refreshUserUI(); if(ok) toast('Guardado ✓');
 }
 document.getElementById('btnAddUser').onclick = ()=>openUserModal(null);
-document.getElementById('userEmpresaFilter').onchange = renderUserTable;
+document.getElementById('userEmpresaFilter').onchange = ()=>{ renderUserStats(); renderUserTable(); };
 document.getElementById('userLicFilter').onchange = renderUserTable;
 document.getElementById('userSearch').oninput = renderUserTable;
 
