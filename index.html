@@ -236,13 +236,13 @@
         <select id="eqOrigenFilter" aria-label="Tipo de equipo"><option value="">Todos los tipos</option></select>
         <select id="eqEmpresaFilter"><option value="">Todas las empresas</option></select>
         <select id="eqEstadoFilter" aria-label="Estado"><option value="">Todos los estados</option></select>
-        <input type="text" id="eqSearch" placeholder="Buscar por usuario, serie, placa, modelo o departamento…">
+        <input type="text" id="eqSearch" placeholder="Buscar por usuario, serie, modelo o departamento…">
         <button id="btnAddEq">+ Nuevo equipo</button>
       </div>
       <div class="table-scroll">
         <table>
           <thead><tr>
-            <th>Usuario</th><th>Empresa</th><th>Departamento</th><th>Tipo</th><th>Equipo</th><th>Serie</th><th>Placa</th>
+            <th>Usuario</th><th>Empresa</th><th>Departamento</th><th>Tipo</th><th>Equipo</th><th>Serie</th>
             <th>Procesador</th><th>RAM</th><th>Disco</th><th>Ubicación</th><th>Estado</th><th></th>
           </tr></thead>
           <tbody id="eqTbody"></tbody>
@@ -550,14 +550,14 @@ function renderEqStats(){
   const base = empF ? equipo.filter(x=>(x.empresa||'Sin empresa asignada')===empF) : equipo;
   const t = tipo => base.filter(x=>x.tipo===tipo).length;
   const personas = new Set(base.map(x=>sinAcentos(x.usuario)).filter(u=>u && !u.startsWith('equipo compartido') && !u.startsWith('servidor'))).size;
-  const sinPlaca = base.filter(x=>!(x.placa||'').trim()).length;
+  const sinUbic = base.filter(x=>!(x.ubicacion||'').trim()).length;
   document.getElementById('eqStats').innerHTML = `
     <div class="stat"><div class="num">${base.length}</div><div class="lbl">${empF ? 'Equipos de '+esc(empF) : 'Equipos activos'}</div></div>
     <div class="stat"><div class="num">${personas}</div><div class="lbl">Personas con equipo</div></div>
     <div class="stat"><div class="num">${t('Laptop')}</div><div class="lbl">Laptops</div></div>
     <div class="stat"><div class="num">${t('PC All-in-One')+t('PC de escritorio')}</div><div class="lbl">PC de escritorio y All-in-One</div></div>
     <div class="stat"><div class="num">${t('Servidor')}</div><div class="lbl">Servidores</div></div>
-    <div class="stat"><div class="num">${sinPlaca}</div><div class="lbl">Sin placa asignada</div></div>
+    <div class="stat"><div class="num">${sinUbic}</div><div class="lbl">Sin ubicación</div></div>
   `;
   const box = document.getElementById('eqResumen');
   if(!empF){ box.style.display='none'; return; }
@@ -581,7 +581,7 @@ function renderEqTable(){
     if(q && ![e.usuario,e.serie,e.placa,e.equipo||e.modelo,e.departamento,e.procesador,e.ubicacion].some(v=>sinAcentos(v).includes(q))) return false;
     return true;
   }).sort((a,b)=> (orden[a.empresa||'Sin empresa asignada']??99)-(orden[b.empresa||'Sin empresa asignada']??99) || sinAcentos(a.usuario).localeCompare(sinAcentos(b.usuario),'es'));
-  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="13" class="empty">Ningún equipo coincide con estos filtros. Cambia el filtro o la búsqueda.</td></tr>`; return; }
+  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="12" class="empty">Ningún equipo coincide con estos filtros. Cambia el filtro o la búsqueda.</td></tr>`; return; }
   tbody.innerHTML = rows.map(e=>`
     <tr>
       <td><b>${esc(e.usuario)}</b></td>
@@ -590,7 +590,6 @@ function renderEqTable(){
       <td style="font-size:11px;">${esc(e.tipo||'—')}</td>
       <td>${esc(e.equipo||e.modelo||'—')}</td>
       <td class="mono">${esc(e.serie||'—')}</td>
-      <td class="mono">${esc(e.placa||'—')}</td>
       <td style="font-size:11px;">${esc(e.procesador||'—')}</td>
       <td class="mono">${esc(e.ram||'—')}</td>
       <td class="mono">${esc(e.disco||'—')}</td>
@@ -625,7 +624,6 @@ function openEqModal(existing){
     <div class="field"><label>Marca</label><select id="g_fabricante">${opcionesLista(EQ_MARCAS, e.fabricante||e.marca, 'Elige la marca')}</select></div>
     <div class="field"><label>Modelo</label><input id="g_equipo" type="text" value="${esc(e.equipo||e.modelo||'')}" placeholder="Ej. HP ProBook 440 G11"></div>
     <div class="field"><label>Número de serie</label><input id="g_serie" type="text" value="${esc(e.serie)}"></div>
-    <div class="field"><label>Placa del activo</label><input id="g_placa" type="text" value="${esc(e.placa)}" placeholder="Ej. HAU-0047"></div>
     <div class="field"><label>Procesador</label><input id="g_procesador" type="text" value="${esc(e.procesador)}" placeholder="Ej. Intel Core i5-1235U"></div>
     <div class="field"><label>RAM</label><input id="g_ram" type="text" value="${esc(e.ram)}" placeholder="Ej. 16 GB"></div>
     <div class="field"><label>Disco</label><input id="g_disco" type="text" value="${esc(e.disco)}" placeholder="Ej. 512 GB SSD"></div>
@@ -647,7 +645,7 @@ window.saveEq = async function(id, isEdit){
     id,
     usuario: v('g_usuario'), empresa: v('g_empresa'), departamento: v('g_departamento'),
     tipo: v('g_tipo'), fabricante: v('g_fabricante'), equipo: v('g_equipo'),
-    serie: v('g_serie'), placa: v('g_placa'), procesador: v('g_procesador'),
+    serie: v('g_serie'), procesador: v('g_procesador'),
     ram: v('g_ram'), disco: v('g_disco'), ubicacion: v('g_ubicacion'),
     estado: v('g_estado'), notas: v('g_notas'),
     origen: 'Activos', telefono: '', cuenta: ''
@@ -990,7 +988,7 @@ document.getElementById('btnRespaldo').onclick = function(){
     XLSX.utils.book_append_sheet(wb, ws, nombre);
   };
   hoja(equipo, [['empresa','Empresa'],['usuario','Usuario'],[r=>r.departamento||r.depto||'','Departamento'],
-    ['tipo','Tipo'],[r=>r.fabricante||r.marca||'','Marca'],[r=>r.equipo||r.modelo||'','Modelo'],[r=>r.serie||r.sn||'','Serie'],['placa','Placa'],
+    ['tipo','Tipo'],[r=>r.fabricante||r.marca||'','Marca'],[r=>r.equipo||r.modelo||'','Modelo'],[r=>r.serie||r.sn||'','Serie'],
     ['procesador','Procesador'],[r=>r.ram||r.memoria||'','RAM'],[r=>r.disco||r.discoduro||'','Disco'],
     ['ubicacion','Ubicación'],['estado','Estado'],['notas','Notas']], 'Equipos activos');
   hoja(usuarios, [['nombre','Nombre'],['apellido','Apellido'],['correo','Correo'],['empresa','Empresa'],['googleWorkspace','Google Workspace'],['dropbox','Dropbox']], 'Usuarios');
