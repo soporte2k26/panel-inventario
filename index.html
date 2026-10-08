@@ -233,23 +233,17 @@
       <div class="stats" id="eqStats"></div>
       <div class="eq-resumen" id="eqResumen" style="display:none;"></div>
       <div class="controls">
-        <select id="eqOrigenFilter">
-          <option value="">Todo el inventario</option>
-          <option value="Activos">Solo Activos (asignados)</option>
-          <option value="Cuarto IT">Solo Cuarto IT (bodega)</option>
-          <option value="Redes">Solo Redes (servidores/impresoras/cámaras)</option>
-          <option value="IT Proyectos">Solo IT Proyectos (obras)</option>
-        </select>
+        <select id="eqOrigenFilter" aria-label="Tipo de equipo"><option value="">Todos los tipos</option></select>
         <select id="eqEmpresaFilter"><option value="">Todas las empresas</option></select>
-        <select id="eqEstadoFilter"><option value="">Todos los estados</option></select>
-        <input type="text" id="eqSearch" placeholder="Buscar por usuario, serie, modelo o IP…">
+        <select id="eqEstadoFilter" aria-label="Estado"><option value="">Todos los estados</option></select>
+        <input type="text" id="eqSearch" placeholder="Buscar por usuario, serie, placa, modelo o departamento…">
         <button id="btnAddEq">+ Nuevo equipo</button>
       </div>
       <div class="table-scroll">
         <table>
           <thead><tr>
-            <th>Origen</th><th>Usuario</th><th>Depto</th><th>Tel</th><th>Cuenta</th><th>Placa</th><th>Serie</th><th>Equipo</th>
-            <th>Procesador</th><th>RAM</th><th>Disco</th><th>Ubicación</th><th>Empresa</th><th>Estado</th><th></th>
+            <th>Usuario</th><th>Empresa</th><th>Departamento</th><th>Tipo</th><th>Equipo</th><th>Serie</th><th>Placa</th>
+            <th>Procesador</th><th>RAM</th><th>Disco</th><th>Ubicación</th><th>Estado</th><th></th>
           </tr></thead>
           <tbody id="eqTbody"></tbody>
         </table>
@@ -553,55 +547,55 @@ window.saveLic = async function(id, isEdit){
 /* ---------- EQUIPOS ---------- */
 function renderEqStats(){
   const empF = document.getElementById('eqEmpresaFilter').value;
-  const base = empF ? equipo.filter(x=>x.empresa===empF) : equipo;
-  const n = o => base.filter(x=>(x.origen||'Activos')===o).length;
-  const us = empF ? usuarios.filter(u=>u.empresa===empF) : usuarios;
-  const personas = new Set(base.filter(x=>(x.origen||'Activos')==='Activos').map(x=>(x.usuario||'').toLowerCase()).filter(Boolean)).size;
+  const base = empF ? equipo.filter(x=>(x.empresa||'Sin empresa asignada')===empF) : equipo;
+  const t = tipo => base.filter(x=>x.tipo===tipo).length;
+  const personas = new Set(base.map(x=>sinAcentos(x.usuario)).filter(u=>u && !u.startsWith('equipo compartido') && !u.startsWith('servidor'))).size;
+  const sinPlaca = base.filter(x=>!(x.placa||'').trim()).length;
   document.getElementById('eqStats').innerHTML = `
-    <div class="stat"><div class="num">${base.length}</div><div class="lbl">${empF ? 'Equipos de '+esc(empF) : 'Total inventario'}</div></div>
-    <div class="stat"><div class="num">${n('Activos')}</div><div class="lbl">Activos (asignados)</div></div>
-    <div class="stat"><div class="num">${n('Cuarto IT')}</div><div class="lbl">Cuarto IT (bodega)</div></div>
-    <div class="stat"><div class="num">${n('Redes')}</div><div class="lbl">Redes</div></div>
-    <div class="stat"><div class="num">${n('IT Proyectos')}</div><div class="lbl">IT Proyectos</div></div>
-    <div class="stat"><div class="num">${us.length}</div><div class="lbl">Usuarios registrados</div></div>
+    <div class="stat"><div class="num">${base.length}</div><div class="lbl">${empF ? 'Equipos de '+esc(empF) : 'Equipos activos'}</div></div>
+    <div class="stat"><div class="num">${personas}</div><div class="lbl">Personas con equipo</div></div>
+    <div class="stat"><div class="num">${t('Laptop')}</div><div class="lbl">Laptops</div></div>
+    <div class="stat"><div class="num">${t('PC All-in-One')+t('PC de escritorio')}</div><div class="lbl">PC de escritorio y All-in-One</div></div>
+    <div class="stat"><div class="num">${t('Servidor')}</div><div class="lbl">Servidores</div></div>
+    <div class="stat"><div class="num">${sinPlaca}</div><div class="lbl">Sin placa asignada</div></div>
   `;
   const box = document.getElementById('eqResumen');
   if(!empF){ box.style.display='none'; return; }
-  const r = resumenEmpresa(empF);
   box.style.display='';
-  box.innerHTML = `<b>${esc(empF.toUpperCase())}</b> &nbsp;·&nbsp; ${r.equipos} equipos (${r.asignados} asignados a ${personas} personas) &nbsp;·&nbsp; <b>${r.usuarios}</b> usuarios registrados &nbsp;·&nbsp; Gmail ${r.gmail} en uso / ${r.gmailContr} contratadas &nbsp;·&nbsp; Dropbox ${r.dropbox} en uso / ${r.dropboxContr} contratadas`;
+  const deptos = {}; base.forEach(x=>{ const d=x.departamento||'Sin departamento'; deptos[d]=(deptos[d]||0)+1; });
+  const top = Object.entries(deptos).sort((a,b)=>b[1]-a[1]).map(([d,n])=>`${esc(d)} (${n})`).join(', ');
+  box.innerHTML = `<b>${esc(empF)}</b>: ${base.length} equipos asignados a ${personas} personas. Por departamento: ${top}.`;
 }
 
 function renderEqTable(){
-  const origenF = document.getElementById('eqOrigenFilter').value;
+  const tipoF = document.getElementById('eqOrigenFilter').value;
   const empresaF = document.getElementById('eqEmpresaFilter').value;
   const estadoF = document.getElementById('eqEstadoFilter').value;
-  const q = document.getElementById('eqSearch').value.trim().toLowerCase();
+  const q = sinAcentos(document.getElementById('eqSearch').value.trim());
   const tbody = document.getElementById('eqTbody');
+  const orden = Object.fromEntries(eqEmpresasOrdenadas().map((x,i)=>[x.empresa,i]));
   const rows = equipo.filter(e=>{
-    if(origenF && (e.origen||'Activos') !== origenF) return false;
-    if(empresaF && e.empresa !== empresaF) return false;
+    if(tipoF && e.tipo !== tipoF) return false;
+    if(empresaF && (e.empresa||'Sin empresa asignada') !== empresaF) return false;
     if(estadoF && e.estado !== estadoF) return false;
-    if(q && !((e.usuario||'').toLowerCase().includes(q) || (e.serie||'').toLowerCase().includes(q) || (e.equipo||e.modelo||'').toLowerCase().includes(q) || (e.cuenta||'').toLowerCase().includes(q) || (e.departamento||'').toLowerCase().includes(q) || (e.procesador||'').toLowerCase().includes(q) || (e.ip||'').toLowerCase().includes(q) || (e.sn||'').toLowerCase().includes(q))) return false;
+    if(q && ![e.usuario,e.serie,e.placa,e.equipo||e.modelo,e.departamento,e.procesador,e.ubicacion].some(v=>sinAcentos(v).includes(q))) return false;
     return true;
-  });
-  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="15" class="empty">Sin resultados.</td></tr>`; return; }
+  }).sort((a,b)=> (orden[a.empresa||'Sin empresa asignada']??99)-(orden[b.empresa||'Sin empresa asignada']??99) || sinAcentos(a.usuario).localeCompare(sinAcentos(b.usuario),'es'));
+  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="13" class="empty">Ningún equipo coincide con estos filtros. Cambia el filtro o la búsqueda.</td></tr>`; return; }
   tbody.innerHTML = rows.map(e=>`
     <tr>
-      <td><span class="tag ${e.origen==='Activos'?'':'rust'}">${esc(e.origen||'Activos')}</span></td>
       <td><b>${esc(e.usuario)}</b></td>
+      <td><span class="tag">${esc(e.empresa||'Sin empresa asignada')}</span></td>
       <td style="font-size:11px;">${esc(e.departamento||'—')}</td>
-      <td class="mono" style="font-size:11px;">${esc(e.telefono||'—')}</td>
-      <td class="mono" style="font-size:11px;">${esc(e.cuenta||'—')}</td>
-      <td class="mono">${esc(e.placa)}</td>
-      <td class="mono">${esc(e.serie||'—')}</td>
+      <td style="font-size:11px;">${esc(e.tipo||'—')}</td>
       <td>${esc(e.equipo||e.modelo||'—')}</td>
+      <td class="mono">${esc(e.serie||'—')}</td>
+      <td class="mono">${esc(e.placa||'—')}</td>
       <td style="font-size:11px;">${esc(e.procesador||'—')}</td>
       <td class="mono">${esc(e.ram||'—')}</td>
       <td class="mono">${esc(e.disco||'—')}</td>
       <td>${esc(e.ubicacion) || '<i style="color:var(--ink-soft)">sin definir</i>'}</td>
-      <td><span class="tag">${esc(e.empresa)}</span></td>
-      <td><span class="tag rust">${esc(e.estado)}</span></td>
+      <td><span class="tag ${e.estado==='Asignado'?'':'rust'}">${esc(e.estado||'—')}</span></td>
       <td class="row-actions">
         <button class="secondary" onclick="editEq('${e.id}')">Editar</button>
         <button class="danger" onclick="delEq('${e.id}')">Eliminar</button>
@@ -620,61 +614,53 @@ window.delEq = async function(id){
 
 function openEqModal(existing){
   const isEdit = !!existing;
-  const e = existing || {id:uid('eq'), usuario:'', departamento:'', telefono:'', cuenta:'', placa:'', serie:'', equipo:'', ram:'', ubicacion:'', estado:'Asignado', empresa:'', notas:''};
+  const e = existing || {id:uid('eq'), usuario:'', departamento:'', placa:'', serie:'', tipo:'Laptop', fabricante:'', equipo:'', procesador:'', ram:'', disco:'', ubicacion:'', estado:'Asignado', empresa:document.getElementById('eqEmpresaFilter').value, notas:''};
+  const deptos = [...new Set(equipo.map(x=>x.departamento).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   document.getElementById('modalBox').innerHTML = `
-    <h3>${isEdit?'Editar':'Nuevo'} equipo</h3>
-    <div class="field"><label>Usuario / responsable</label><input id="g_usuario" type="text" value="${esc(e.usuario)}"></div>
-    <div class="field"><label>Departamento</label><input id="g_departamento" type="text" value="${esc(e.departamento)}"></div>
-    <div class="field"><label>Teléfono</label><input id="g_telefono" type="text" value="${esc(e.telefono)}"></div>
-    <div class="field"><label>Cuenta / correo</label><input id="g_cuenta" type="text" value="${esc(e.cuenta)}"></div>
-    <div class="field"><label>Placa del activo</label><input id="g_placa" type="text" value="${esc(e.placa)}"></div>
+    <h3>${isEdit?'Editar equipo':'Nuevo equipo'}</h3>
+    <div class="field"><label>Usuario asignado</label><input id="g_usuario" type="text" value="${esc(e.usuario)}" placeholder="Nombre y apellido"></div>
+    <div class="field"><label>Empresa</label><select id="g_empresa">${opcionesLista(EQ_EMPRESAS, e.empresa, 'Elige la empresa')}</select></div>
+    <div class="field"><label>Departamento</label><input id="g_departamento" type="text" list="dl_deptos" value="${esc(e.departamento)}" placeholder="Ej. Contabilidad, Ventas, Sucursales"></div>
+    <div class="field"><label>Tipo de equipo</label><select id="g_tipo">${opcionesLista(EQ_TIPOS, e.tipo, '')}</select></div>
+    <div class="field"><label>Marca</label><select id="g_fabricante">${opcionesLista(EQ_MARCAS, e.fabricante||e.marca, 'Elige la marca')}</select></div>
+    <div class="field"><label>Modelo</label><input id="g_equipo" type="text" value="${esc(e.equipo||e.modelo||'')}" placeholder="Ej. HP ProBook 440 G11"></div>
     <div class="field"><label>Número de serie</label><input id="g_serie" type="text" value="${esc(e.serie)}"></div>
-    <div class="field"><label>Equipo (marca y modelo)</label><input id="g_equipo" type="text" value="${esc(e.equipo||e.modelo||'')}"></div>
-    <div class="field"><label>Procesador</label><input id="g_procesador" type="text" value="${esc(e.procesador)}" placeholder="Ej. Intel Core i5 1135G7"></div>
+    <div class="field"><label>Placa del activo</label><input id="g_placa" type="text" value="${esc(e.placa)}" placeholder="Ej. HAU-0047"></div>
+    <div class="field"><label>Procesador</label><input id="g_procesador" type="text" value="${esc(e.procesador)}" placeholder="Ej. Intel Core i5-1235U"></div>
     <div class="field"><label>RAM</label><input id="g_ram" type="text" value="${esc(e.ram)}" placeholder="Ej. 16 GB"></div>
-    <div class="field"><label>Disco</label><input id="g_disco" type="text" value="${esc(e.disco)}" placeholder="Ej. 512 SSD"></div>
-    <div class="field"><label>Ubicación</label><input id="g_ubicacion" type="text" value="${esc(e.ubicacion)}" placeholder="Ej. Oficina Haus, Bodega, Obra Siena…"></div>
-    <div class="field"><label>Empresa</label><select id="g_empresa">${opcionesEmpresa(e.empresa)}</select></div>
-    <div class="field"><label>Estado</label><input id="g_estado" type="text" list="dl_estados" value="${esc(e.estado)}" placeholder="Asignado, En bodega, Dañado…"></div>
-    <div class="field"><label>Origen</label><select id="g_origen">${['Activos','Cuarto IT','Redes','IT Proyectos'].map(o=>`<option ${ (e.origen||'Activos')===o?'selected':''}>${o}</option>`).join('')}</select></div>
-    <datalist id="dl_empresas">${[...new Set(['Semah','Haus','Semah Properties','Colinas','Almacenajes',...equipo.map(x=>x.empresa)].filter(Boolean))].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
-    <datalist id="dl_estados">${[...new Set(['Asignado','Operativo','En bodega','Dañado — para revisión','Dado de baja',...equipo.map(x=>x.estado)].filter(Boolean))].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
-    <div class="field"><label>Notas</label><input id="g_notas" type="text" value="${esc(e.notas)}"></div>
+    <div class="field"><label>Disco</label><input id="g_disco" type="text" value="${esc(e.disco)}" placeholder="Ej. 512 GB SSD"></div>
+    <div class="field"><label>Ubicación</label><input id="g_ubicacion" type="text" value="${esc(e.ubicacion)}" placeholder="Ej. Oficina Semah, Sucursal Colón, Obra Siena"></div>
+    <div class="field"><label>Estado</label><select id="g_estado">${opcionesLista(EQ_ESTADOS, e.estado, '')}</select></div>
+    <div class="field"><label>Notas</label><input id="g_notas" type="text" value="${esc(e.notas)}" placeholder="Monitor, accesorios u observaciones"></div>
+    <datalist id="dl_deptos">${deptos.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
     <div class="modal-actions">
       <button class="secondary" onclick="closeModal()">Cancelar</button>
-      <button onclick="saveEq('${e.id}', ${isEdit})">Guardar</button>
+      <button onclick="saveEq('${e.id}', ${isEdit})">${isEdit?'Guardar cambios':'Agregar equipo'}</button>
     </div>
   `;
   showModal();
 }
 
 window.saveEq = async function(id, isEdit){
+  const v = k => document.getElementById(k).value.trim();
   const data = {
     id,
-    usuario: document.getElementById('g_usuario').value.trim(),
-    departamento: document.getElementById('g_departamento').value.trim(),
-    telefono: document.getElementById('g_telefono').value.trim(),
-    cuenta: document.getElementById('g_cuenta').value.trim(),
-    placa: document.getElementById('g_placa').value.trim(),
-    serie: document.getElementById('g_serie').value.trim(),
-    equipo: document.getElementById('g_equipo').value.trim(),
-    procesador: document.getElementById('g_procesador').value.trim(),
-    ram: document.getElementById('g_ram').value.trim(),
-    disco: document.getElementById('g_disco').value.trim(),
-    origen: document.getElementById('g_origen').value,
-    ubicacion: document.getElementById('g_ubicacion').value.trim(),
-    empresa: document.getElementById('g_empresa').value,
-    estado: document.getElementById('g_estado').value.trim(),
-    notas: document.getElementById('g_notas').value.trim(),
+    usuario: v('g_usuario'), empresa: v('g_empresa'), departamento: v('g_departamento'),
+    tipo: v('g_tipo'), fabricante: v('g_fabricante'), equipo: v('g_equipo'),
+    serie: v('g_serie'), placa: v('g_placa'), procesador: v('g_procesador'),
+    ram: v('g_ram'), disco: v('g_disco'), ubicacion: v('g_ubicacion'),
+    estado: v('g_estado'), notas: v('g_notas'),
+    origen: 'Activos', telefono: '', cuenta: ''
   };
-  if(!data.usuario){ alert('El usuario es obligatorio'); return; }
+  if(!data.usuario){ alert('Escribe el usuario asignado.'); return; }
+  if(!data.empresa){ alert('Elige la empresa.'); return; }
   if(isEdit){
-    equipo = equipo.map(e=> e.id!==id ? e : limpiarEquipo({...e, ...data}));   // conserva campos extra (fabricante, tipo…)
+    equipo = equipo.map(e=> e.id!==id ? e : limpiarEquipo({...e, ...data}));
   } else {
     equipo.push(limpiarEquipo(data));
   }
   const ok = await Storage.set('equipos', equipo);
-  closeModal(); refreshEqUI(); if(ok) toast('Guardado ✓');
+  closeModal(); refreshEqUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Equipo agregado ✓');
 }
 
 /* ---------- modal helpers ---------- */
@@ -708,8 +694,15 @@ function refreshLicUI(){
   sincronizar();
 }
 function refreshEqUI(){
-  selectEmpresas('eqEmpresaFilter');
-  fillSelect(document.getElementById('eqEstadoFilter'), equipo.map(e=>e.estado));
+  const sE = document.getElementById('eqEmpresaFilter'), vE = sE.value;
+  sE.innerHTML = '<option value="">Todas las empresas</option>' + eqEmpresasOrdenadas().filter(x=>x.n>0).map(x=>`<option value="${esc(x.empresa)}">${esc(x.empresa)} (${x.n})</option>`).join('');
+  sE.value = vE;
+  const sT = document.getElementById('eqOrigenFilter'), vT = sT.value;
+  sT.innerHTML = '<option value="">Todos los tipos</option>' + [...new Set([...EQ_TIPOS, ...equipo.map(e=>e.tipo).filter(Boolean)])].filter(t=>equipo.some(e=>e.tipo===t)).map(t=>`<option value="${esc(t)}">${esc(t)} (${equipo.filter(e=>e.tipo===t).length})</option>`).join('');
+  sT.value = vT;
+  const sS = document.getElementById('eqEstadoFilter'), vS = sS.value;
+  sS.innerHTML = '<option value="">Todos los estados</option>' + [...new Set([...EQ_ESTADOS, ...equipo.map(e=>e.estado).filter(Boolean)])].map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  sS.value = vS;
   renderEqTable(); sincronizar();
 }
 
@@ -717,7 +710,7 @@ document.getElementById('btnAddLic').onclick = ()=>openLicModal(null);
 document.getElementById('btnAddEq').onclick = ()=>openEqModal(null);
 document.getElementById('licEmpresaFilter').onchange = ()=>{ renderLicStats(); renderLicTable(); };
 document.getElementById('licSearch').oninput = renderLicTable;
-document.getElementById('eqOrigenFilter').onchange = renderEqTable;
+document.getElementById('eqOrigenFilter').onchange = ()=>{ renderEqStats(); renderEqTable(); };
 document.getElementById('eqEmpresaFilter').onchange = ()=>{ renderEqStats(); renderEqTable(); };
 document.getElementById('eqEstadoFilter').onchange = renderEqTable;
 document.getElementById('eqSearch').oninput = renderEqTable;
@@ -839,6 +832,22 @@ document.getElementById('btnTogglePw').onclick = function(){
 
 let usuarios = [];
 const EMPRESAS = ['Almacenajes','Colinas','Haus','Semah','Semah Properties'];
+/* Catálogos de la pestaña Equipos activos */
+const EQ_EMPRESAS = ['Haus','Almacenajes','Semah','Colinas','Semah Properties','Coronado Mall','T. Storage','Sin empresa asignada'];
+const EQ_TIPOS    = ['Laptop','PC All-in-One','PC de escritorio','Tablet','Servidor'];
+const EQ_ESTADOS  = ['Asignado','En reparación','En bodega','Por verificar','Dado de baja'];
+const EQ_MARCAS   = ['HP','Lenovo','Apple','Dell','Otra'];
+const sinAcentos = t => (t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+/* Empresas presentes, de la que tiene más equipos a la que tiene menos */
+function eqEmpresasOrdenadas(){
+  const n = {}; equipo.forEach(x=>{ const k = x.empresa||'Sin empresa asignada'; n[k]=(n[k]||0)+1; });
+  const todas = [...new Set([...EQ_EMPRESAS, ...Object.keys(n)])];
+  return todas.map(e=>({empresa:e, n:n[e]||0})).sort((a,b)=> b.n-a.n || a.empresa.localeCompare(b.empresa,'es'));
+}
+function opcionesLista(lista, actual, vacio){
+  const l = actual && !lista.includes(actual) ? [...lista, actual] : lista;
+  return (vacio?`<option value="">${vacio}</option>`:'') + l.map(v=>`<option value="${esc(v)}" ${v===actual?'selected':''}>${esc(v)}</option>`).join('');
+}
 const tieneGmail = u => !!(u.googleWorkspace && String(u.googleWorkspace).trim());
 const tieneDropbox = u => !!(u.dropbox && String(u.dropbox).trim() && !/^no$/i.test(u.dropbox));
 const planCorto = p => { p = String(p||''); if(/standar/i.test(p)) return 'Business Standard'; if(/starter/i.test(p)) return 'Business Starter'; return p ? p.slice(0,30) : ''; };
@@ -980,10 +989,10 @@ document.getElementById('btnRespaldo').onclick = function(){
     ws['!cols'] = cols.map(()=>({wch:20}));
     XLSX.utils.book_append_sheet(wb, ws, nombre);
   };
-  hoja(equipo, [['origen','Origen'],['empresa','Empresa'],['usuario','Usuario'],[r=>r.departamento||r.depto||'','Departamento'],
-    ['telefono','Teléfono'],['cuenta','Cuenta'],['placa','Placa'],[r=>r.serie||r.sn||'','Serie'],[r=>r.equipo||r.modelo||'','Equipo'],
-    [r=>r.fabricante||r.marca||'','Fabricante'],['procesador','Procesador'],[r=>r.ram||r.memoria||'','RAM'],[r=>r.disco||r.discoduro||'','Disco'],
-    ['tipo','Tipo'],['ip','IP'],['ubicacion','Ubicación'],['estado','Estado'],['notas','Notas']], 'Equipos');
+  hoja(equipo, [['empresa','Empresa'],['usuario','Usuario'],[r=>r.departamento||r.depto||'','Departamento'],
+    ['tipo','Tipo'],[r=>r.fabricante||r.marca||'','Marca'],[r=>r.equipo||r.modelo||'','Modelo'],[r=>r.serie||r.sn||'','Serie'],['placa','Placa'],
+    ['procesador','Procesador'],[r=>r.ram||r.memoria||'','RAM'],[r=>r.disco||r.discoduro||'','Disco'],
+    ['ubicacion','Ubicación'],['estado','Estado'],['notas','Notas']], 'Equipos activos');
   hoja(usuarios, [['nombre','Nombre'],['apellido','Apellido'],['correo','Correo'],['empresa','Empresa'],['googleWorkspace','Google Workspace'],['dropbox','Dropbox']], 'Usuarios');
   hoja(licenses, [['nombre','Herramienta'],['proveedor','Proveedor'],['empresa','Empresa'],['asientos','Asientos'],['costo','Costo'],['frecuencia','Frecuencia'],['categoria','Categoría']], 'Licencias');
   hoja(sistemas, [['empresa','Empresa'],['rubro','Rubro'],['detalle','Servicio'],['usuario','Usuario'],['password','Contraseña'],['link','Link']], 'Sistemas');
