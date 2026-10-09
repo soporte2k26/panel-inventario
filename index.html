@@ -203,7 +203,7 @@
   <div class="tabs">
     <div class="tab active" data-view="licencias">RESUMEN Y LICENCIAS POR EMPRESA</div>
     <div class="tab" data-view="equipos">EQUIPOS ACTIVOS</div>
-    <div class="tab" data-view="usadas">LAPTOPS USADAS — DISPOSICIÓN</div>
+    <div class="tab" data-view="usadas">LAPTOPS DISPONIBLES</div>
     <div class="tab" data-view="usuarios">USUARIOS — LICENCIAS GMAIL Y DROPBOX</div>
     <div class="tab" data-view="sistemas">SISTEMAS DE CREDENCIALES</div>
   </div>
@@ -229,21 +229,20 @@
       </div>
     </div>
 
-    <!-- LAPTOPS USADAS VIEW -->
+    <!-- LAPTOPS DISPONIBLES VIEW -->
     <div id="view-usadas" style="display:none;">
       <div class="stats" id="luStats"></div>
-      <div class="eq-resumen" id="luNota">Laptops que ya no están asignadas. Plan de disposición del hito Q4: <b>evaluar → borrado seguro y formateo → cotización → disposición → acta y baja contable</b>. Estas laptops no cuentan en Equipos activos.</div>
+      <div class="eq-resumen" id="luNota">Laptops sin usuario, disponibles para asignar. No cuentan en Equipos activos. Al usar <b>Asignar</b>, la laptop pasa a Equipos activos con su nuevo usuario.</div>
       <div class="controls">
         <select id="luEmpresaFilter" aria-label="Empresa"><option value="">Todas las empresas</option></select>
-        <select id="luEtapaFilter" aria-label="Etapa"><option value="">Todas las etapas</option></select>
-        <input type="text" id="luSearch" placeholder="Buscar por modelo, serie, último usuario o acta…">
-        <button id="btnAddLu">+ Agregar laptop usada</button>
+        <select id="luEtapaFilter" aria-label="Condición"><option value="">Todas las condiciones</option></select>
+        <input type="text" id="luSearch" placeholder="Buscar por modelo, serie o último usuario…">
+        <button id="btnAddLu">+ Agregar laptop disponible</button>
       </div>
       <div class="table-scroll">
         <table>
           <thead><tr>
-            <th>Equipo</th><th>Serie</th><th>Empresa</th><th>Último usuario</th><th>Procedencia</th><th>Condición</th>
-            <th>Etapa</th><th>Borrado seguro</th><th>Valor cotizado</th><th>Destino</th><th>Acta</th><th>Baja contable</th><th></th>
+            <th>Equipo</th><th>Serie</th><th>Empresa</th><th>Último usuario</th><th>Procedencia</th><th>Condición</th><th>Notas</th><th></th>
           </tr></thead>
           <tbody id="luTbody"></tbody>
         </table>
@@ -748,44 +747,33 @@ document.querySelectorAll('.tab').forEach(tab=>{
   });
 });
 
-/* ---------- LAPTOPS USADAS (DISPOSICIÓN) ---------- */
+/* ---------- LAPTOPS DISPONIBLES ---------- */
 let usadas = [];
-const LU_ETAPAS = ['Por evaluar','Para reasignar','Borrado seguro y formateo','Cotizada','Dispuesta','Baja contable registrada'];
-const LU_CONDICION = ['Por evaluar','Buena','Regular','Dañada'];
-const LU_DESTINO = ['Venta','Donación','Reciclaje','Reasignación interna'];
-const LU_METODO = ['Formateo con borrado seguro (sobrescritura)','Borrado criptográfico / reset de fábrica','Destrucción física del disco'];
-const luDinero = v => { const n = parseFloat(String(v||'').replace(/[^0-9.]/g,'')); return isNaN(n) ? null : n; };
+const LU_CONDICION = ['Buena','Por revisar','Requiere reparación'];
 
 function renderLuStats(){
   const empF = document.getElementById('luEmpresaFilter').value;
   const base = empF ? usadas.filter(x=>x.empresa===empF) : usadas;
-  const en = et => base.filter(x=>x.etapa===et).length;
-  const aDisponer = base.filter(x=>x.etapa!=='Para reasignar');
-  const cerradas = aDisponer.filter(x=>x.etapa==='Baja contable registrada').length;
-  const borradas = base.filter(x=>x.fechaBorrado).length;
-  const valor = base.reduce((a,x)=>a+(luDinero(x.valorCotizado)||0),0);
-  const pct = aDisponer.length ? Math.round(cerradas*100/aDisponer.length) : 0;
+  const c = k => base.filter(x=>x.condicion===k).length;
   document.getElementById('luStats').innerHTML = `
-    <div class="stat"><div class="num">${base.length}</div><div class="lbl">Laptops usadas</div></div>
-    <div class="stat"><div class="num">${en('Por evaluar')}</div><div class="lbl">Por evaluar</div></div>
-    <div class="stat"><div class="num">${borradas}</div><div class="lbl">Con borrado seguro</div></div>
-    <div class="stat"><div class="num">${en('Cotizada')}</div><div class="lbl">Cotizadas</div></div>
-    <div class="stat"><div class="num">$${valor.toLocaleString('es-PA',{maximumFractionDigits:0})}</div><div class="lbl">Valor cotizado</div></div>
-    <div class="stat"><div class="num">${pct}%</div><div class="lbl">Plan ejecutado (${cerradas}/${aDisponer.length} con baja contable)</div></div>
+    <div class="stat"><div class="num">${base.length}</div><div class="lbl">Laptops disponibles</div></div>
+    <div class="stat"><div class="num">${c('Buena')}</div><div class="lbl">Listas para asignar</div></div>
+    <div class="stat"><div class="num">${c('Por revisar')}</div><div class="lbl">Por revisar</div></div>
+    <div class="stat"><div class="num">${c('Requiere reparación')}</div><div class="lbl">Requieren reparación</div></div>
   `;
 }
 function renderLuTable(){
   const empF = document.getElementById('luEmpresaFilter').value;
-  const etF = document.getElementById('luEtapaFilter').value;
+  const coF = document.getElementById('luEtapaFilter').value;
   const q = sinAcentos(document.getElementById('luSearch').value.trim());
   const rows = usadas.filter(x=>{
     if(empF && x.empresa!==empF) return false;
-    if(etF && x.etapa!==etF) return false;
-    if(q && ![x.equipo,x.serie,x.ultimoUsuario,x.actaNo,x.comprador].some(v=>sinAcentos(v).includes(q))) return false;
+    if(coF && x.condicion!==coF) return false;
+    if(q && ![x.equipo,x.serie,x.ultimoUsuario].some(v=>sinAcentos(v).includes(q))) return false;
     return true;
-  }).sort((a,b)=> LU_ETAPAS.indexOf(a.etapa)-LU_ETAPAS.indexOf(b.etapa) || (a.empresa||'').localeCompare(b.empresa||'','es') || sinAcentos(a.ultimoUsuario).localeCompare(sinAcentos(b.ultimoUsuario),'es'));
+  }).sort((a,b)=> LU_CONDICION.indexOf(a.condicion)-LU_CONDICION.indexOf(b.condicion) || (a.empresa||'').localeCompare(b.empresa||'','es') || sinAcentos(a.equipo).localeCompare(sinAcentos(b.equipo),'es'));
   const tb = document.getElementById('luTbody');
-  if(!rows.length){ tb.innerHTML = `<tr><td colspan="13" class="empty">No hay laptops usadas con estos filtros.</td></tr>`; return; }
+  if(!rows.length){ tb.innerHTML = `<tr><td colspan="8" class="empty">No hay laptops disponibles con estos filtros.</td></tr>`; return; }
   tb.innerHTML = rows.map(x=>`
     <tr>
       <td><b>${esc(x.equipo||'—')}</b><div style="font-size:10.5px;color:var(--ink-soft)">${esc([x.procesador,x.ram,x.disco].filter(Boolean).join(' · '))}</div></td>
@@ -793,14 +781,10 @@ function renderLuTable(){
       <td><span class="tag">${esc(x.empresa||'—')}</span></td>
       <td>${esc(x.ultimoUsuario||'—')}</td>
       <td style="font-size:11px;">${esc(x.procedencia||'—')}</td>
-      <td>${esc(x.condicion||'—')}</td>
-      <td><span class="tag ${x.etapa==='Baja contable registrada'?'':'rust'}">${esc(x.etapa||'—')}</span></td>
-      <td style="font-size:11px;">${x.fechaBorrado ? esc(x.fechaBorrado)+'<br>'+esc(x.metodoBorrado||'') : '—'}</td>
-      <td class="mono">${luDinero(x.valorCotizado)!==null ? '$'+luDinero(x.valorCotizado).toLocaleString('es-PA') : '—'}</td>
-      <td>${esc(x.destino||'—')}${x.comprador?'<div style="font-size:10.5px;color:var(--ink-soft)">'+esc(x.comprador)+'</div>':''}</td>
-      <td class="mono">${esc(x.actaNo||'—')}</td>
-      <td class="mono">${esc(x.fechaBaja||'—')}</td>
+      <td><span class="tag ${x.condicion==='Buena'?'':'rust'}">${esc(x.condicion||'—')}</span></td>
+      <td style="font-size:11px;">${esc(x.notas||'')}</td>
       <td class="row-actions">
+        <button onclick="asignarLu('${x.id}')">Asignar</button>
         <button class="secondary" onclick="editLu('${x.id}')">Editar</button>
         <button class="danger" onclick="delLu('${x.id}')">Eliminar</button>
       </td>
@@ -812,33 +796,25 @@ function refreshLuUI(){
   sE.innerHTML = '<option value="">Todas las empresas</option>' + emps.map(e=>`<option value="${esc(e)}">${esc(e)} (${usadas.filter(x=>x.empresa===e).length})</option>`).join('');
   sE.value = vE;
   const sT = document.getElementById('luEtapaFilter'), vT = sT.value;
-  sT.innerHTML = '<option value="">Todas las etapas</option>' + LU_ETAPAS.map(t=>`<option value="${esc(t)}">${esc(t)} (${usadas.filter(x=>x.etapa===t).length})</option>`).join('');
+  sT.innerHTML = '<option value="">Todas las condiciones</option>' + LU_CONDICION.map(t=>`<option value="${esc(t)}">${esc(t)} (${usadas.filter(x=>x.condicion===t).length})</option>`).join('');
   sT.value = vT;
   renderLuStats(); renderLuTable();
 }
 function openLuModal(existing){
   const isEdit = !!existing;
-  const x = existing || {id:uid('lu'), empresa:'', ultimoUsuario:'', procedencia:'Bodega (Cuarto IT)', fabricante:'', equipo:'', serie:'', procesador:'', ram:'', disco:'', condicion:'Por evaluar', etapa:'Por evaluar', destino:'', fechaBorrado:'', metodoBorrado:'', valorCotizado:'', comprador:'', actaNo:'', fechaBaja:'', notas:''};
+  const x = existing || {id:uid('lu'), empresa:'', ultimoUsuario:'', procedencia:'Cuarto IT', fabricante:'', equipo:'', serie:'', procesador:'', ram:'', disco:'', condicion:'Por revisar', notas:''};
   document.getElementById('modalBox').innerHTML = `
-    <h3>${isEdit?'Editar laptop usada':'Agregar laptop usada'}</h3>
+    <h3>${isEdit?'Editar laptop disponible':'Agregar laptop disponible'}</h3>
     <div class="field"><label>Empresa</label><select id="u_empresa">${opcionesLista(EQ_EMPRESAS, x.empresa, 'Elige la empresa')}</select></div>
-    <div class="field"><label>Último usuario</label><input id="u_ultimoUsuario" type="text" value="${esc(x.ultimoUsuario)}" placeholder="Quién la usó por última vez"></div>
-    <div class="field"><label>Procedencia</label><input id="u_procedencia" type="text" value="${esc(x.procedencia)}" placeholder="Ej. Bodega (Cuarto IT), Offboarding de…"></div>
     <div class="field"><label>Marca</label><select id="u_fabricante">${opcionesLista(EQ_MARCAS, x.fabricante, 'Elige la marca')}</select></div>
     <div class="field"><label>Modelo</label><input id="u_equipo" type="text" value="${esc(x.equipo)}"></div>
     <div class="field"><label>Número de serie</label><input id="u_serie" type="text" value="${esc(x.serie)}"></div>
     <div class="field"><label>Procesador</label><input id="u_procesador" type="text" value="${esc(x.procesador)}"></div>
     <div class="field"><label>RAM</label><input id="u_ram" type="text" value="${esc(x.ram)}"></div>
     <div class="field"><label>Disco</label><input id="u_disco" type="text" value="${esc(x.disco)}"></div>
+    <div class="field"><label>Último usuario</label><input id="u_ultimoUsuario" type="text" value="${esc(x.ultimoUsuario)}" placeholder="Quién la usó por última vez"></div>
+    <div class="field"><label>Procedencia</label><input id="u_procedencia" type="text" value="${esc(x.procedencia)}" placeholder="Ej. Cuarto IT, offboarding de…"></div>
     <div class="field"><label>Condición</label><select id="u_condicion">${opcionesLista(LU_CONDICION, x.condicion, '')}</select></div>
-    <div class="field"><label>Etapa del plan</label><select id="u_etapa">${opcionesLista(LU_ETAPAS, x.etapa, '')}</select></div>
-    <div class="field"><label>Fecha de borrado seguro</label><input id="u_fechaBorrado" type="date" value="${esc(x.fechaBorrado)}"></div>
-    <div class="field"><label>Método de borrado</label><select id="u_metodoBorrado">${opcionesLista(LU_METODO, x.metodoBorrado, 'Elige el método')}</select></div>
-    <div class="field"><label>Valor cotizado (USD)</label><input id="u_valorCotizado" type="text" inputmode="decimal" value="${esc(x.valorCotizado)}" placeholder="Ej. 180"></div>
-    <div class="field"><label>Destino</label><select id="u_destino">${opcionesLista(LU_DESTINO, x.destino, 'Sin definir')}</select></div>
-    <div class="field"><label>Comprador o receptor</label><input id="u_comprador" type="text" value="${esc(x.comprador)}"></div>
-    <div class="field"><label>N.º de acta de disposición</label><input id="u_actaNo" type="text" value="${esc(x.actaNo)}" placeholder="Ej. ACT-DISP-2026-001"></div>
-    <div class="field"><label>Fecha de baja contable</label><input id="u_fechaBaja" type="date" value="${esc(x.fechaBaja)}"></div>
     <div class="field"><label>Notas</label><input id="u_notas" type="text" value="${esc(x.notas)}"></div>
     <div class="modal-actions">
       <button class="secondary" onclick="closeModal()">Cancelar</button>
@@ -849,20 +825,57 @@ function openLuModal(existing){
 window.editLu = id => openLuModal(usadas.find(x=>x.id===id));
 window.saveLu = async function(id, isEdit){
   const v = k => document.getElementById('u_'+k).value.trim();
-  const campos = ['empresa','ultimoUsuario','procedencia','fabricante','equipo','serie','procesador','ram','disco','condicion','etapa','fechaBorrado','metodoBorrado','valorCotizado','destino','comprador','actaNo','fechaBaja','notas'];
-  const data = {id}; campos.forEach(k=>data[k]=v(k));
+  const data = {id}; ['empresa','fabricante','equipo','serie','procesador','ram','disco','ultimoUsuario','procedencia','condicion','notas'].forEach(k=>data[k]=v(k));
   data.notas = limpiarTexto(data.notas);
   if(!data.equipo){ alert('Escribe el modelo de la laptop.'); return; }
   if(!data.empresa){ alert('Elige la empresa.'); return; }
-  if(data.etapa==='Baja contable registrada' && (!data.actaNo || !data.fechaBaja)){ alert('Para registrar la baja contable hacen falta el número de acta y la fecha de baja.'); return; }
-  if(['Cotizada','Dispuesta','Baja contable registrada'].includes(data.etapa) && data.destino!=='Reasignación interna' && !data.fechaBorrado){ alert('Antes de cotizar o disponer, registra la fecha del borrado seguro.'); return; }
   usadas = isEdit ? usadas.map(x=>x.id!==id ? x : {...x, ...data}) : [...usadas, data];
   const ok = await Storage.set('laptops_usadas', usadas);
   closeModal(); refreshLuUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Laptop agregada ✓');
 };
+window.asignarLu = function(id){
+  const x = usadas.find(y=>y.id===id); if(!x) return;
+  const deptos = [...new Set(equipo.map(e=>e.departamento).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  document.getElementById('modalBox').innerHTML = `
+    <h3>Asignar laptop</h3>
+    <p style="font-size:12px;margin:0 0 10px;"><b>${esc(x.equipo)}</b> · serie ${esc(x.serie||'sin serie')}. Pasará a <b>Equipos activos</b> y saldrá de Laptops disponibles.</p>
+    <div class="field"><label>Usuario asignado</label><input id="a_usuario" type="text" placeholder="Nombre y apellido"></div>
+    <div class="field"><label>Empresa</label><select id="a_empresa">${opcionesLista(EQ_EMPRESAS, x.empresa, 'Elige la empresa')}</select></div>
+    <div class="field"><label>Departamento</label><input id="a_departamento" type="text" list="dl_deptos_a"></div>
+    <div class="field"><label>Ubicación</label><input id="a_ubicacion" type="text" placeholder="Ej. Panamá, Arraiján, Sucursal VH"></div>
+    <datalist id="dl_deptos_a">${deptos.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancelar</button>
+      <button onclick="confirmarAsignarLu('${x.id}')">Asignar</button>
+    </div>`;
+  showModal();
+};
+window.confirmarAsignarLu = async function(id){
+  const x = usadas.find(y=>y.id===id); if(!x) return;
+  const v = k => document.getElementById('a_'+k).value.trim();
+  const usuario = v('usuario'), empresa = v('empresa');
+  if(!usuario){ alert('Escribe el usuario asignado.'); return; }
+  if(!empresa){ alert('Elige la empresa.'); return; }
+  if(x.serie && equipo.some(e=>(e.serie||'').trim().toUpperCase()===x.serie.trim().toUpperCase()) && !confirm(`La serie ${x.serie} ya existe en Equipos activos. ¿Asignar de todos modos?`)) return;
+  const hoy = new Date().toLocaleDateString('es-PA',{day:'2-digit',month:'short',year:'numeric'});
+  const nuevo = limpiarEquipo({
+    id: uid('eq'), usuario, empresa, departamento: v('departamento'), ubicacion: v('ubicacion'),
+    tipo:'Laptop', fabricante:x.fabricante, equipo:x.equipo, serie:x.serie, procesador:x.procesador, ram:x.ram, disco:x.disco,
+    estado:'Asignado', origen:'Activos', telefono:'', cuenta:'',
+    notas: `Asignada desde Laptops disponibles el ${hoy}` + (x.ultimoUsuario ? `; último usuario: ${x.ultimoUsuario}` : '')
+  });
+  const eqAntes = equipo, luAntes = usadas;
+  equipo = [...equipo, nuevo];
+  usadas = usadas.filter(y=>y.id!==id);
+  const ok1 = await Storage.set('equipos', equipo);
+  const ok2 = ok1 ? await Storage.set('laptops_usadas', usadas) : false;
+  if(!ok1){ equipo = eqAntes; usadas = luAntes; }
+  closeModal(); refreshEqUI(); refreshLuUI();
+  if(ok1 && ok2) toast(`Asignada a ${usuario} ✓`);
+};
 window.delLu = async function(id){
   const x = usadas.find(y=>y.id===id); if(!x) return;
-  if(!confirm(`¿Eliminar ${x.equipo} (${x.serie||'sin serie'}) de Laptops usadas?`)) return;
+  if(!confirm(`¿Eliminar ${x.equipo} (${x.serie||'sin serie'}) de Laptops disponibles?`)) return;
   usadas = usadas.filter(y=>y.id!==id);
   await Storage.set('laptops_usadas', usadas); refreshLuUI(); toast('Eliminada');
 };
@@ -1137,9 +1150,7 @@ document.getElementById('btnRespaldo').onclick = function(){
     ['tipo','Tipo'],[r=>r.fabricante||r.marca||'','Marca'],[r=>r.equipo||r.modelo||'','Modelo'],[r=>r.serie||r.sn||'','Serie'],
     ['procesador','Procesador'],[r=>r.ram||r.memoria||'','RAM'],[r=>r.disco||r.discoduro||'','Disco'],
     ['ubicacion','Ubicación'],['estado','Estado'],['notas','Notas']], 'Equipos activos');
-  hoja(usadas, [['empresa','Empresa'],['equipo','Modelo'],['serie','Serie'],['ultimoUsuario','Último usuario'],['procedencia','Procedencia'],
-    ['condicion','Condición'],['etapa','Etapa'],['fechaBorrado','Fecha borrado seguro'],['metodoBorrado','Método de borrado'],
-    ['valorCotizado','Valor cotizado (USD)'],['destino','Destino'],['comprador','Comprador/receptor'],['actaNo','Acta'],['fechaBaja','Fecha baja contable'],['notas','Notas']], 'Laptops usadas');
+  hoja(usadas, [['empresa','Empresa'],['fabricante','Marca'],['equipo','Modelo'],['serie','Serie'],['procesador','Procesador'],['ram','RAM'],['disco','Disco'],['ultimoUsuario','Último usuario'],['procedencia','Procedencia'],['condicion','Condición'],['notas','Notas']], 'Laptops disponibles');
   hoja(usuarios, [['nombre','Nombre'],['apellido','Apellido'],['correo','Correo'],['empresa','Empresa'],['googleWorkspace','Google Workspace'],['dropbox','Dropbox']], 'Usuarios');
   hoja(licenses, [['nombre','Herramienta'],['proveedor','Proveedor'],['empresa','Empresa'],['asientos','Asientos'],['costo','Costo'],['frecuencia','Frecuencia'],['categoria','Categoría']], 'Licencias');
   hoja(sistemas, [['empresa','Empresa'],['rubro','Rubro'],['detalle','Servicio'],['usuario','Usuario'],['password','Contraseña'],['link','Link']], 'Sistemas');
