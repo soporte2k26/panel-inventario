@@ -157,6 +157,16 @@
   .field label{display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-family:"SF Mono",monospace;}
   .field input, .field select{width:100%;}
   .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
+  .modal.ancho{width:760px;}
+  .acta-sec{font-family:"SF Mono",monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin:16px 0 8px;border-bottom:1px solid var(--rule);padding-bottom:4px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;}
+  @media (max-width:640px){ .grid2{grid-template-columns:1fr;} }
+  .checks{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;margin-bottom:12px;}
+  .checks label{display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-family:inherit;font-size:13px;color:var(--ink);}
+  .firma-box{border:1px dashed var(--ink-soft);background:#fff;height:120px;position:relative;touch-action:none;}
+  .firma-box canvas{width:100%;height:100%;display:block;cursor:crosshair;}
+  .firma-box button{position:absolute;right:4px;top:4px;padding:2px 8px;font-size:11px;}
+  .terminos{font-size:11.5px;color:var(--ink-soft);line-height:1.45;background:var(--paper);padding:8px 12px;border:1px solid var(--rule);}
 
   .footer-note{
     margin-top:26px;font-size:11.5px;color:var(--ink-soft);
@@ -204,6 +214,7 @@
     <div class="tab active" data-view="licencias">RESUMEN Y LICENCIAS POR EMPRESA</div>
     <div class="tab" data-view="equipos">EQUIPOS ACTIVOS</div>
     <div class="tab" data-view="usadas">LAPTOPS DISPONIBLES</div>
+    <div class="tab" data-view="movs">ENTRADAS Y SALIDAS</div>
     <div class="tab" data-view="usuarios">USUARIOS — LICENCIAS GMAIL Y DROPBOX</div>
     <div class="tab" data-view="sistemas">SISTEMAS DE CREDENCIALES</div>
   </div>
@@ -225,6 +236,26 @@
             <th>Costo</th><th>Frecuencia</th><th>Notas</th><th></th>
           </tr></thead>
           <tbody id="licTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ENTRADAS Y SALIDAS VIEW -->
+    <div id="view-movs" style="display:none;">
+      <div class="stats" id="movStats"></div>
+      <div class="eq-resumen">Cada entrada o salida genera el acta en PDF con firmas y la guarda en Dropbox: <b>Acta Doc / Entradas de personal</b> o <b>Acta Doc / Salidas de personal</b>. El equipo cambia de lista automáticamente.</div>
+      <div class="controls">
+        <select id="movTipoFilter" aria-label="Tipo"><option value="">Entradas y salidas</option><option value="Entrada">Solo entradas</option><option value="Salida">Solo salidas</option></select>
+        <input type="text" id="movSearch" placeholder="Buscar por colaborador, acta, modelo o serie…">
+        <button id="btnMovEntrada">+ Nueva entrada</button>
+        <button id="btnMovSalida" class="secondary">+ Nueva salida</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>Acta</th><th>Fecha</th><th>Tipo</th><th>Motivo</th><th>Colaborador</th><th>Empresa</th><th>Equipo</th><th>Dropbox</th><th></th>
+          </tr></thead>
+          <tbody id="movTbody"></tbody>
         </table>
       </div>
     </div>
@@ -333,6 +364,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
   // ---------- SUPABASE SETUP ----------
   const SUPABASE_URL = "https://lnncdpqyuckjziugqclg.supabase.co";
@@ -684,7 +716,7 @@ window.saveEq = async function(id, isEdit){
 
 /* ---------- modal helpers ---------- */
 function showModal(){ document.getElementById('overlay').classList.add('show'); }
-window.closeModal = function(){ document.getElementById('overlay').classList.remove('show'); }
+window.closeModal = function(){ document.getElementById('overlay').classList.remove('show'); document.getElementById('modalBox').classList.remove('ancho'); }
 document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeModal(); });
 
 /* ---------- refresh / wiring ---------- */
@@ -742,6 +774,7 @@ document.querySelectorAll('.tab').forEach(tab=>{
     document.getElementById('view-licencias').style.display = view==='licencias' ? '' : 'none';
     document.getElementById('view-equipos').style.display = view==='equipos' ? '' : 'none';
     document.getElementById('view-usadas').style.display = view==='usadas' ? '' : 'none';
+    document.getElementById('view-movs').style.display = view==='movs' ? '' : 'none';
     document.getElementById('view-usuarios').style.display = view==='usuarios' ? '' : 'none';
     document.getElementById('view-sistemas').style.display = view==='sistemas' ? '' : 'none';
   });
@@ -883,6 +916,270 @@ document.getElementById('btnAddLu').onclick = ()=>openLuModal(null);
 document.getElementById('luEmpresaFilter').onchange = ()=>{ renderLuStats(); renderLuTable(); };
 document.getElementById('luEtapaFilter').onchange = renderLuTable;
 document.getElementById('luSearch').oninput = renderLuTable;
+
+/* ---------- ENTRADAS Y SALIDAS (ACTAS) ---------- */
+let movs = [];
+const MOV_MOTIVOS = { Entrada:['Ingreso de personal','Asignación o reemplazo de equipo'], Salida:['Salida de personal','Cambio o devolución de equipo'] };
+const MOV_CARPETA = { Entrada:'Entradas de personal', Salida:'Salidas de personal' };
+const MOV_ACCESORIOS = ['Cargador','Mochila / bolso','Mouse','Adaptador','Cable USB'];
+const MOV_ESTADO_EQ = ['Nuevo','Usado en óptimas condiciones','Usado con detalles'];
+const hoyISO = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
+const fechaLarga = iso => { try{ return new Date(iso+'T12:00:00').toLocaleDateString('es-PA',{day:'2-digit',month:'long',year:'numeric'}); }catch(e){ return iso; } };
+
+function siguienteActa(tipo, fecha){
+  const pre = (tipo==='Entrada'?'ENT':'SAL') + '-' + (fecha||hoyISO()).slice(0,4) + '-';
+  const n = movs.filter(m=>(m.numero||'').startsWith(pre)).map(m=>parseInt(m.numero.slice(pre.length),10)||0);
+  return pre + String((n.length?Math.max(...n):0)+1).padStart(3,'0');
+}
+function renderMovStats(){
+  const mes = hoyISO().slice(0,7);
+  const pend = movs.filter(m=>m.estadoDropbox!=='Subido').length;
+  document.getElementById('movStats').innerHTML = `
+    <div class="stat"><div class="num">${movs.length}</div><div class="lbl">Actas registradas</div></div>
+    <div class="stat"><div class="num">${movs.filter(m=>m.tipo==='Entrada').length}</div><div class="lbl">Entradas</div></div>
+    <div class="stat"><div class="num">${movs.filter(m=>m.tipo==='Salida').length}</div><div class="lbl">Salidas</div></div>
+    <div class="stat"><div class="num">${movs.filter(m=>(m.fecha||'').startsWith(mes)).length}</div><div class="lbl">Este mes</div></div>
+    <div class="stat"><div class="num">${pend}</div><div class="lbl">Pendientes de subir a Dropbox</div></div>`;
+}
+function renderMovTable(){
+  const tF = document.getElementById('movTipoFilter').value;
+  const q = sinAcentos(document.getElementById('movSearch').value.trim());
+  const rows = movs.filter(m=>(!tF||m.tipo===tF) && (!q || [m.numero,m.colaborador,m.equipo&&m.equipo.equipo,m.equipo&&m.equipo.serie,m.empresa].some(v=>sinAcentos(v).includes(q))))
+    .sort((a,b)=> (b.fecha||'').localeCompare(a.fecha||'') || (b.numero||'').localeCompare(a.numero||''));
+  const tb = document.getElementById('movTbody');
+  if(!rows.length){ tb.innerHTML = `<tr><td colspan="9" class="empty">Todavía no hay actas. Usa “+ Nueva entrada” o “+ Nueva salida”.</td></tr>`; return; }
+  tb.innerHTML = rows.map(m=>`
+    <tr>
+      <td class="mono"><b>${esc(m.numero)}</b></td>
+      <td class="mono">${esc(m.fecha)}</td>
+      <td><span class="tag ${m.tipo==='Entrada'?'':'rust'}">${esc(m.tipo)}</span></td>
+      <td style="font-size:11px;">${esc(m.motivo)}</td>
+      <td><b>${esc(m.colaborador)}</b><div style="font-size:10.5px;color:var(--ink-soft)">${esc([m.cargo,m.departamento].filter(Boolean).join(' · '))}</div></td>
+      <td><span class="tag">${esc(m.empresa||'—')}</span></td>
+      <td>${esc(m.equipo?m.equipo.equipo:'—')}<div class="mono" style="font-size:10.5px;color:var(--ink-soft)">${esc(m.equipo?m.equipo.serie:'')}</div></td>
+      <td style="font-size:11px;">${m.estadoDropbox==='Subido' ? '✓ Subido' : '<span style="color:var(--rust)">Pendiente</span>'}</td>
+      <td class="row-actions">
+        <button class="secondary" onclick="descargarActa('${m.id}')">PDF</button>
+        ${m.estadoDropbox!=='Subido' ? `<button onclick="reintentarActa('${m.id}')">Subir</button>` : ''}
+      </td>
+    </tr>`).join('');
+}
+function refreshMovUI(){ renderMovStats(); renderMovTable(); }
+
+function prepararFirma(id){
+  const cv = document.getElementById(id), ctx = cv.getContext('2d');
+  const r = cv.getBoundingClientRect(); cv.width = r.width*2; cv.height = r.height*2; ctx.scale(2,2);
+  ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#1b2733';
+  let dib = false; cv.dataset.vacia = '1';
+  const pos = e => { const b = cv.getBoundingClientRect(); return [e.clientX-b.left, e.clientY-b.top]; };
+  cv.onpointerdown = e => { dib = true; cv.setPointerCapture(e.pointerId); const [x,y]=pos(e); ctx.beginPath(); ctx.moveTo(x,y); };
+  cv.onpointermove = e => { if(!dib) return; const [x,y]=pos(e); ctx.lineTo(x,y); ctx.stroke(); cv.dataset.vacia='0'; };
+  cv.onpointerup = cv.onpointercancel = () => { dib = false; };
+}
+window.borrarFirma = id => { const cv=document.getElementById(id); cv.getContext('2d').clearRect(0,0,cv.width,cv.height); cv.dataset.vacia='1'; };
+
+function openMovModal(tipo){
+  const entrada = tipo==='Entrada';
+  const opciones = entrada
+    ? usadas.map(x=>`<option value="lu:${x.id}">${esc(x.equipo)} · ${esc(x.serie||'sin serie')} · ${esc(x.empresa||'')} (${esc(x.condicion||'')})</option>`).join('') + '<option value="otro">Otro equipo (no está en Laptops disponibles)</option>'
+    : [...equipo].sort((a,b)=>sinAcentos(a.usuario).localeCompare(sinAcentos(b.usuario),'es')).map(e=>`<option value="eq:${e.id}">${esc(e.usuario)} — ${esc(e.equipo||'')} · ${esc(e.serie||'')}</option>`).join('');
+  const deptos = [...new Set(equipo.map(e=>e.departamento).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const box = document.getElementById('modalBox'); box.classList.add('ancho');
+  box.innerHTML = `
+    <h3>${entrada ? 'Acta de entrega de equipos — Entrada' : 'Acta de devolución de equipos — Salida'}</h3>
+    <div class="grid2">
+      <div class="field"><label>Motivo</label><select id="m_motivo">${MOV_MOTIVOS[tipo].map(v=>`<option>${v}</option>`).join('')}</select></div>
+      <div class="field"><label>Fecha</label><input id="m_fecha" type="date" value="${hoyISO()}"></div>
+    </div>
+    <div class="acta-sec">1 · Equipo</div>
+    <div class="field"><label>${entrada?'Equipo que se entrega':'Equipo que se devuelve'}</label><select id="m_equipo"><option value="">Elige el equipo</option>${opciones}</select></div>
+    <div id="m_otro" class="grid2" style="display:none;">
+      <div class="field"><label>Tipo</label><select id="m_o_tipo">${opcionesLista(EQ_TIPOS,'Laptop','')}</select></div>
+      <div class="field"><label>Marca</label><select id="m_o_marca">${opcionesLista(EQ_MARCAS,'','Elige la marca')}</select></div>
+      <div class="field"><label>Modelo</label><input id="m_o_modelo" type="text"></div>
+      <div class="field"><label>Número de serie</label><input id="m_o_serie" type="text"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Estado del equipo</label><select id="m_estadoEq">${MOV_ESTADO_EQ.map(v=>`<option ${(!entrada && v==='Usado en óptimas condiciones')?'selected':''}>${v}</option>`).join('')}</select></div>
+      ${entrada ? `<div class="field"><label>Ubicación</label><input id="m_ubicacion" type="text" placeholder="Ej. Panamá, Arraiján, Sucursal VH"></div>`
+                : `<div class="field"><label>Después de la salida, el equipo queda</label><select id="m_destino"><option>Por revisar</option><option>Buena</option><option>Requiere reparación</option></select></div>`}
+    </div>
+    <label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;font-family:'SF Mono',monospace;">Accesorios ${entrada?'entregados':'devueltos'}</label>
+    <div class="checks">${MOV_ACCESORIOS.map((a,i)=>`<label><input type="checkbox" class="m_acc" value="${a}" ${i===0?'checked':''}> ${a}</label>`).join('')}</div>
+    <div class="field"><label>Otros equipos o accesorios (celular, monitor, IMEI…)</label><input id="m_otros" type="text"></div>
+    <div class="acta-sec">2 · Colaborador</div>
+    <div class="grid2">
+      <div class="field"><label>Nombre completo</label><input id="m_colaborador" type="text"></div>
+      <div class="field"><label>Cédula / identificación</label><input id="m_cedula" type="text"></div>
+      <div class="field"><label>Cargo</label><input id="m_cargo" type="text"></div>
+      <div class="field"><label>Departamento</label><input id="m_departamento" type="text" list="dl_deptos_m"></div>
+      <div class="field"><label>Empresa</label><select id="m_empresa">${opcionesLista(EQ_EMPRESAS,'','Elige la empresa')}</select></div>
+      <div class="field"><label>Nombre de IT que ${entrada?'entrega':'recibe'}</label><input id="m_it" type="text"></div>
+    </div>
+    <datalist id="dl_deptos_m">${deptos.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="field"><label>Observaciones</label><input id="m_obs" type="text"></div>
+    <div class="acta-sec">3 · Términos y firmas</div>
+    <div class="terminos">${entrada
+      ? 'El colaborador declara que recibe los equipos descritos en buen estado; que es responsable de su cuidado, custodia y buen uso; que son propiedad de Grupo Semah para uso exclusivamente laboral; que no los prestará ni instalará programas sin autorización de IT; que notificará de inmediato a IT cualquier daño, pérdida o robo; y que los devolverá con todos sus accesorios al finalizar la relación laboral o cuando IT lo requiera.'
+      : 'El colaborador entrega a IT los equipos y accesorios descritos. IT recibe los equipos en el estado indicado en esta acta. Con esta firma se deja constancia de la devolución; cualquier faltante o daño queda registrado en las observaciones.'}</div>
+    <div class="grid2" style="margin-top:12px;">
+      <div><div class="firma-box"><canvas id="firmaCol"></canvas><button class="secondary" onclick="borrarFirma('firmaCol')">Borrar</button></div><div style="font-size:11px;text-align:center;margin-top:4px;">Firma del colaborador que ${entrada?'recibe':'entrega'}</div></div>
+      <div><div class="firma-box"><canvas id="firmaIT"></canvas><button class="secondary" onclick="borrarFirma('firmaIT')">Borrar</button></div><div style="font-size:11px;text-align:center;margin-top:4px;">Firma de IT que ${entrada?'entrega':'recibe'}</div></div>
+    </div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancelar</button>
+      <button id="btnGuardarActa" onclick="guardarMov('${tipo}')">Guardar y generar acta</button>
+    </div>`;
+  showModal();
+  prepararFirma('firmaCol'); prepararFirma('firmaIT');
+  document.getElementById('m_equipo').onchange = e => {
+    const v = e.target.value;
+    document.getElementById('m_otro').style.display = v==='otro' ? '' : 'none';
+    if(v.startsWith('eq:')){
+      const x = equipo.find(y=>y.id===v.slice(3)); if(!x) return;
+      document.getElementById('m_colaborador').value = x.usuario||'';
+      document.getElementById('m_departamento').value = x.departamento||'';
+      document.getElementById('m_empresa').innerHTML = opcionesLista(EQ_EMPRESAS, x.empresa, 'Elige la empresa');
+    }
+    if(v.startsWith('lu:')){
+      const x = usadas.find(y=>y.id===v.slice(3)); if(!x) return;
+      document.getElementById('m_empresa').innerHTML = opcionesLista(EQ_EMPRESAS, x.empresa, 'Elige la empresa');
+      document.getElementById('m_estadoEq').value = 'Usado en óptimas condiciones';
+    }
+  };
+}
+
+function generarActaPDF(m){
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({unit:'mm', format:'letter'});
+  const W = 215.9, M = 18; let y = 18; const entrada = m.tipo==='Entrada';
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(110);
+  doc.text('GRUPO SEMAH · DEPARTAMENTO DE IT', M, y); doc.text(m.numero, W-M, y, {align:'right'}); y += 8;
+  doc.setTextColor(27,39,51); doc.setFontSize(16);
+  doc.text(entrada ? 'Acta de entrega de equipos tecnológicos' : 'Acta de devolución de equipos tecnológicos', M, y); y += 6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(90);
+  doc.text(`${m.tipo} de personal · Motivo: ${m.motivo} · Fecha: ${fechaLarga(m.fecha)}`, M, y); y += 4;
+  doc.setDrawColor(27,39,51); doc.line(M, y, W-M, y); y += 8;
+  const sec = t => { doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(27,39,51); doc.text(t, M, y); y += 2; doc.setDrawColor(200); doc.line(M, y, W-M, y); y += 6; };
+  const fila = (k, v, x=M, w=85) => { doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(90); doc.text(k, x, y); doc.setFont('helvetica','normal'); doc.setTextColor(20); doc.text(String(v||'—'), x+32, y, {maxWidth:w-32}); };
+  sec('1. Datos del colaborador');
+  fila('Nombre:', m.colaborador); fila('Cédula:', m.cedula, M+92); y += 6;
+  fila('Cargo:', m.cargo); fila('Departamento:', m.departamento, M+92); y += 6;
+  fila('Empresa:', m.empresa); fila('Fecha:', fechaLarga(m.fecha), M+92); y += 10;
+  sec(entrada ? '2. Equipo entregado' : '2. Equipo devuelto');
+  doc.setFillColor(238,242,247); doc.rect(M, y-4, W-2*M, 7, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(27,39,51);
+  const cols = [M+2, M+32, M+102, M+142];
+  ['Tipo','Marca / modelo','N.º de serie','Estado'].forEach((h,i)=>doc.text(h, cols[i], y)); y += 7;
+  doc.setFont('helvetica','normal'); doc.setTextColor(20);
+  const e = m.equipo||{};
+  doc.text(e.tipo||'—', cols[0], y); doc.text(e.equipo||'—', cols[1], y, {maxWidth:66}); doc.text(e.serie||'—', cols[2], y); doc.text(m.estadoEquipo||'—', cols[3], y, {maxWidth:38}); y += 9;
+  if(e.procesador||e.ram||e.disco){ fila('Especificaciones:', [e.procesador,e.ram,e.disco].filter(Boolean).join(' · '), M, 180); y += 6; }
+  fila('Accesorios:', (m.accesorios||[]).join(', ') || 'Ninguno', M, 180); y += 6;
+  if(m.otros){ fila('Otros:', m.otros, M, 180); y += 6; }
+  if(entrada && m.ubicacion){ fila('Ubicación:', m.ubicacion, M, 180); y += 6; }
+  if(!entrada && m.destino){ fila('Estado al recibir:', m.destino, M, 180); y += 6; }
+  y += 4; sec('3. Observaciones');
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(20);
+  const obs = doc.splitTextToSize(m.observaciones || 'Sin observaciones.', W-2*M); doc.text(obs, M, y); y += obs.length*4.6 + 6;
+  sec(entrada ? '4. Términos y condiciones de uso' : '4. Constancia de devolución');
+  const terms = entrada ? [
+    'Es responsable del cuidado, custodia y buen uso de los equipos entregados, que son propiedad de Grupo Semah y se asignan para uso exclusivamente laboral.',
+    'No prestará los equipos a terceros ni instalará programas sin autorización del departamento de IT.',
+    'La información de trabajo almacenada en los equipos pertenece a la empresa, y IT podrá revisarlos, actualizarlos o respaldarlos cuando sea necesario.',
+    'En caso de daño, pérdida o robo, notificará de inmediato a IT. Los daños por negligencia o mal uso se tramitarán con Recursos Humanos según la política de la empresa.',
+    'Al finalizar la relación laboral o cuando IT lo requiera, devolverá la totalidad de los equipos y accesorios en las mismas condiciones, salvo el desgaste normal por uso.'
+  ] : [
+    'El colaborador entrega al departamento de IT los equipos y accesorios descritos en esta acta.',
+    'IT recibe los equipos en el estado indicado. Cualquier faltante o daño queda registrado en las observaciones.',
+    'La información de trabajo contenida en los equipos pertenece a Grupo Semah; IT realizará el respaldo y el borrado correspondiente antes de reasignarlos.'
+  ];
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(40);
+  doc.text(entrada ? 'Por medio de la presente firma, el colaborador declara y acepta que:' : 'Con la presente firma se deja constancia de que:', M, y); y += 5;
+  terms.forEach((t,i)=>{ const l = doc.splitTextToSize(`${i+1}. ${t}`, W-2*M-4); doc.text(l, M+2, y); y += l.length*4.2 + 1.5; });
+  y = Math.max(y + 8, 200);
+  const fw = 75;
+  [[m.firmaCol, entrada?'Colaborador que recibe':'Colaborador que entrega', m.colaborador, M],
+   [m.firmaIT, entrada?'IT que entrega':'IT que recibe', m.itNombre, W-M-fw]].forEach(([img, rol, nom, x])=>{
+    if(img){ try{ doc.addImage(img, 'PNG', x+5, y, fw-10, 25); }catch(e){} }
+    doc.setDrawColor(27,39,51); doc.line(x, y+27, x+fw, y+27);
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(27,39,51); doc.text(rol, x, y+32);
+    doc.setFont('helvetica','normal'); doc.setTextColor(60); doc.text(`Nombre: ${nom||''}`, x, y+37); doc.text(`Fecha: ${fechaLarga(m.fecha)}`, x, y+42);
+  });
+  doc.setFontSize(8); doc.setTextColor(130);
+  doc.text(`Original para IT. Copia para el colaborador. · Grupo Semah, Departamento de IT · ${m.numero}`, W/2, 270, {align:'center'});
+  return doc;
+}
+const nombreActa = m => `${m.numero} ${m.colaborador}`.replace(/[\\/:*?"<>|]/g,'').trim();
+
+async function subirActa(m){
+  try{
+    const doc = generarActaPDF(m);
+    const b64 = doc.output('datauristring').split(',')[1];
+    const { data, error } = await window.__sb.functions.invoke('subir-acta', { body: { carpeta: MOV_CARPETA[m.tipo], nombre: nombreActa(m), pdfBase64: b64 } });
+    if(error || !data || !data.ok) throw (error || new Error((data&&data.error)||'Error'));
+    return data.path;
+  }catch(e){ console.warn('Subida a Dropbox pendiente:', e); return null; }
+}
+window.descargarActa = id => { const m = movs.find(x=>x.id===id); if(m) generarActaPDF(m).save(nombreActa(m)+'.pdf'); };
+window.reintentarActa = async id => {
+  const m = movs.find(x=>x.id===id); if(!m) return;
+  toast('Subiendo a Dropbox…');
+  const path = await subirActa(m);
+  if(path){ movs = movs.map(x=>x.id===id?{...x, estadoDropbox:'Subido', dropboxPath:path}:x); await Storage.set('movimientos', movs); refreshMovUI(); toast('Acta guardada en Dropbox ✓'); }
+  else { toast('Dropbox todavía no está conectado. Descarga el PDF y súbelo a la carpeta.'); }
+};
+
+window.guardarMov = async function(tipo){
+  const entrada = tipo==='Entrada';
+  const v = id => (document.getElementById(id)?.value||'').trim();
+  const sel = v('m_equipo');
+  if(!sel){ alert('Elige el equipo.'); return; }
+  if(!v('m_colaborador')){ alert('Escribe el nombre del colaborador.'); return; }
+  if(!v('m_empresa')){ alert('Elige la empresa.'); return; }
+  if(!v('m_it')){ alert('Escribe el nombre de la persona de IT.'); return; }
+  if(document.getElementById('firmaCol').dataset.vacia==='1' || document.getElementById('firmaIT').dataset.vacia==='1'){ alert('Faltan las firmas del colaborador y de IT.'); return; }
+  let eqData, origen = null;
+  if(sel.startsWith('lu:')){ origen = usadas.find(x=>x.id===sel.slice(3)); eqData = {tipo:'Laptop', fabricante:origen.fabricante, equipo:origen.equipo, serie:origen.serie, procesador:origen.procesador, ram:origen.ram, disco:origen.disco}; }
+  else if(sel.startsWith('eq:')){ origen = equipo.find(x=>x.id===sel.slice(3)); eqData = {tipo:origen.tipo, fabricante:origen.fabricante, equipo:origen.equipo, serie:origen.serie, procesador:origen.procesador, ram:origen.ram, disco:origen.disco}; }
+  else { if(!v('m_o_modelo')){ alert('Escribe el modelo del equipo.'); return; } eqData = {tipo:v('m_o_tipo'), fabricante:v('m_o_marca'), equipo:v('m_o_modelo'), serie:v('m_o_serie')}; }
+  if(entrada && eqData.serie && equipo.some(e=>(e.serie||'').toUpperCase()===eqData.serie.toUpperCase()) && !confirm(`La serie ${eqData.serie} ya está en Equipos activos. ¿Continuar?`)) return;
+  const fecha = v('m_fecha') || hoyISO();
+  const m = {
+    id: uid('mv'), numero: siguienteActa(tipo, fecha), tipo, motivo: v('m_motivo'), fecha,
+    colaborador: v('m_colaborador'), cedula: v('m_cedula'), cargo: v('m_cargo'), departamento: v('m_departamento'), empresa: v('m_empresa'),
+    itNombre: v('m_it'), equipo: eqData, estadoEquipo: v('m_estadoEq'),
+    accesorios: [...document.querySelectorAll('.m_acc:checked')].map(c=>c.value), otros: limpiarTexto(v('m_otros')),
+    ubicacion: entrada ? v('m_ubicacion') : '', destino: entrada ? '' : v('m_destino'),
+    observaciones: limpiarTexto(v('m_obs')),
+    firmaCol: document.getElementById('firmaCol').toDataURL('image/png'),
+    firmaIT: document.getElementById('firmaIT').toDataURL('image/png'),
+    estadoDropbox: 'Pendiente', dropboxPath: '', registrado: new Date().toISOString()
+  };
+  const btn = document.getElementById('btnGuardarActa'); btn.disabled = true; btn.textContent = 'Guardando…';
+  const nota = `${m.numero} (${fechaLarga(fecha)})`;
+  const eqAntes = equipo, luAntes = usadas, mvAntes = movs;
+  if(entrada){
+    equipo = [...equipo, limpiarEquipo({ id: uid('eq'), usuario: m.colaborador, empresa: m.empresa, departamento: m.departamento, ubicacion: m.ubicacion,
+      ...eqData, estado:'Asignado', origen:'Activos', telefono:'', cuenta:'', notas:`Entregado con acta ${nota}` })];
+    if(origen && sel.startsWith('lu:')) usadas = usadas.filter(x=>x.id!==origen.id);
+  } else {
+    equipo = equipo.filter(x=>x.id!==origen.id);
+    usadas = [...usadas, { id: uid('lu'), empresa: m.empresa, ...eqData, ultimoUsuario: m.colaborador, procedencia: `${m.motivo} · acta ${m.numero}`, condicion: m.destino || 'Por revisar', notas: m.observaciones }];
+  }
+  movs = [...movs, m];
+  const ok = await Storage.set('movimientos', movs) && await Storage.set('equipos', equipo) && await Storage.set('laptops_usadas', usadas);
+  if(!ok){ equipo = eqAntes; usadas = luAntes; movs = mvAntes; btn.disabled=false; btn.textContent='Guardar y generar acta'; alert('No se pudo guardar. Revisa la conexión e intenta de nuevo.'); return; }
+  btn.textContent = 'Subiendo acta a Dropbox…';
+  const path = await subirActa(m);
+  if(path){ movs = movs.map(x=>x.id===m.id?{...x, estadoDropbox:'Subido', dropboxPath:path}:x); await Storage.set('movimientos', movs); }
+  else { generarActaPDF(m).save(nombreActa(m)+'.pdf'); }
+  closeModal(); refreshEqUI(); refreshLuUI(); refreshMovUI();
+  toast(path ? `Acta ${m.numero} guardada en Dropbox ✓` : `Acta ${m.numero} registrada. Se descargó el PDF: súbelo a Acta Doc / ${MOV_CARPETA[tipo]}.`);
+};
+document.getElementById('btnMovEntrada').onclick = ()=>openMovModal('Entrada');
+document.getElementById('btnMovSalida').onclick = ()=>openMovModal('Salida');
+document.getElementById('movTipoFilter').onchange = renderMovTable;
+document.getElementById('movSearch').oninput = renderMovTable;
 
 let sistemas = [];
 let pwVisible = false;
@@ -1150,6 +1447,7 @@ document.getElementById('btnRespaldo').onclick = function(){
     ['tipo','Tipo'],[r=>r.fabricante||r.marca||'','Marca'],[r=>r.equipo||r.modelo||'','Modelo'],[r=>r.serie||r.sn||'','Serie'],
     ['procesador','Procesador'],[r=>r.ram||r.memoria||'','RAM'],[r=>r.disco||r.discoduro||'','Disco'],
     ['ubicacion','Ubicación'],['estado','Estado'],['notas','Notas']], 'Equipos activos');
+  hoja(movs.map(m=>({...m, equipoTxt:(m.equipo&&m.equipo.equipo)||'', serieTxt:(m.equipo&&m.equipo.serie)||'', acc:(m.accesorios||[]).join(', ')})), [['numero','Acta'],['fecha','Fecha'],['tipo','Tipo'],['motivo','Motivo'],['colaborador','Colaborador'],['cargo','Cargo'],['departamento','Departamento'],['empresa','Empresa'],['equipoTxt','Equipo'],['serieTxt','Serie'],['acc','Accesorios'],['itNombre','IT'],['estadoDropbox','Dropbox'],['dropboxPath','Ruta en Dropbox']], 'Entradas y salidas');
   hoja(usadas, [['empresa','Empresa'],['fabricante','Marca'],['equipo','Modelo'],['serie','Serie'],['procesador','Procesador'],['ram','RAM'],['disco','Disco'],['ultimoUsuario','Último usuario'],['procedencia','Procedencia'],['condicion','Condición'],['notas','Notas']], 'Laptops disponibles');
   hoja(usuarios, [['nombre','Nombre'],['apellido','Apellido'],['correo','Correo'],['empresa','Empresa'],['googleWorkspace','Google Workspace'],['dropbox','Dropbox']], 'Usuarios');
   hoja(licenses, [['nombre','Herramienta'],['proveedor','Proveedor'],['empresa','Empresa'],['asientos','Asientos'],['costo','Costo'],['frecuencia','Frecuencia'],['categoria','Categoría']], 'Licencias');
@@ -1214,13 +1512,15 @@ async function init(){
   equipo = equipo.map(limpiarEquipo);
   usadas = await Storage.get('laptops_usadas', null);
   if(usadas === null){ usadas = []; }
+  movs = await Storage.get('movimientos', null);
+  if(movs === null){ movs = []; }
   usuarios = await Storage.get('usuarios', null);
   if(usuarios === null){ usuarios = []; }
   sistemas = await Storage.get('sistemas', null);
   if(sistemas === null){ sistemas = []; }
 
   actualizarMeta();
-  refreshLicUI(); refreshEqUI(); refreshLuUI(); refreshUserUI(); refreshSysUI();
+  refreshLicUI(); refreshEqUI(); refreshLuUI(); refreshMovUI(); refreshUserUI(); refreshSysUI();
   if(readOnly){ setSync('off'); toast('⚠ No hay conexión con la base de datos: los cambios no se guardarán'); }
   else setSync('ok','● Conectado a la nube');
 }
