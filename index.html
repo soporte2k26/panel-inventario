@@ -1205,7 +1205,7 @@ document.getElementById('luSearch').oninput = renderLuTable;
 /* ---------- ENTRADAS Y SALIDAS (ACTAS) ---------- */
 let movs = [];
 const MOV_CARPETA = { Entrada:'Entradas de personal', Salida:'Salidas de personal' };
-const MOV_EMPRESAS = ['Almacenajes','Colinas','Haus','Semah','Semah Properties','SG Investment','Coronado Mall','T. Storage'];
+const MOV_EMPRESAS = ['Almacenajes','Colinas','Haus','SG. Investment','Semah Properties','Coronado Mall','T. Storage'];
 const ENT_MOTIVOS = ['Ingreso de personal','Asignación o reemplazo de equipo'];
 const SAL_TIPOS = ['Renuncia','Despido (bloqueo inmediato)','Fin de contrato','Traslado entre empresas'];
 const ENT_ESTADO = ['Nuevo','Usado en óptimas condiciones','N/A'];
@@ -1528,7 +1528,7 @@ window.guardarMov = async function(tipo){
   };
   const btn = document.getElementById('btnGuardarActa'); btn.disabled = true; btn.textContent = 'Guardando…';
   const eqAntes = equipo, luAntes = usadas, mvAntes = movs;
-  const empNexo = m.empresa==='SG Investment' ? 'Semah' : m.empresa;
+  const empNexo = m.empresa;
   if(ent && lap.modelo){
     equipo = [...equipo, limpiarEquipo({ id: uid('eq'), usuario: m.colaborador, empresa: empNexo, departamento: m.departamento, ubicacion: '',
       tipo: lap.tipo||'Laptop', fabricante: lap.marca||'', equipo: lap.modelo, serie: lap.serie||'', procesador: lap.procesador||'', ram: lap.ram||'', disco: lap.disco||'',
@@ -1662,9 +1662,9 @@ document.getElementById('btnTogglePw').onclick = function(){
 
 
 let usuarios = [];
-const EMPRESAS = ['Almacenajes','Colinas','Haus','Semah','Semah Properties'];
+const EMPRESAS = ['Almacenajes','Colinas','Haus','SG. Investment','Semah Properties'];
 /* Catálogos de la pestaña Equipos activos */
-const EQ_EMPRESAS = ['Haus','Almacenajes','Semah','Colinas','Semah Properties','Coronado Mall','T. Storage','Sin empresa asignada'];
+const EQ_EMPRESAS = ['Haus','Almacenajes','SG. Investment','Colinas','Semah Properties','Coronado Mall','T. Storage','Sin empresa asignada'];
 const EQ_TIPOS    = ['Laptop','PC All-in-One','PC de escritorio','Tablet','Servidor'];
 const EQ_ESTADOS  = ['Asignado','En reparación','En bodega','Por verificar','Dado de baja'];
 const EQ_MARCAS   = ['HP','Lenovo','Apple','Dell','Otra'];
