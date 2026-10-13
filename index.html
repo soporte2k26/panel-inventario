@@ -158,6 +158,10 @@
   .field input, .field select{width:100%;}
   .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
   .modal.ancho{width:760px;}
+  .ficha-sal{border:1px solid var(--rule);background:var(--paper-dark);padding:10px 14px;margin:6px 0 4px;font-size:12.5px;line-height:1.5;}
+  .ficha-sal b{font-weight:700;} .ficha-sal .falta-lista{color:var(--rust);margin-top:6px;}
+  .ficha-sal label{display:block;margin:2px 0;}
+  .field.falta input, .field.falta select{border-color:var(--rust) !important;background:#fbefe9;}
   .acta-sec{font-family:"SF Mono",monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin:16px 0 8px;border-bottom:1px solid var(--rule);padding-bottom:4px;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;}
   @media (max-width:640px){ .grid2{grid-template-columns:1fr;} }
@@ -1298,6 +1302,86 @@ const gV = id => (document.getElementById(id)?.value||'').trim();
 const tdIn = (id, type='text') => `<td><input id="${id}" type="${type}" style="width:100%"></td>`;
 const tdSel = (id, opts) => `<td><select id="${id}" style="width:100%">${opcionesLista(opts,'','—')}</select></td>`;
 
+/* --- Salida: personal con equipo, vinculado por usuarioId o por nombre --- */
+const normNom = t => sinAcentos(t).replace(/\s+/g,' ').trim();
+function personalConEquipo(){
+  const porNombre = new Map(usuarios.map(u=>[normNom(lnNombre(u)), u]).filter(([k])=>k));
+  const mapa = new Map();
+  const ficha = (u, nombre) => {
+    const k = u ? 'u:'+u.id : 'n:'+normNom(nombre);
+    if(!mapa.has(k)) mapa.set(k, { key:k, usuarioId: u?u.id:'', usuario: u||null, nombre: (u ? lnNombre(u) : String(nombre||'')).replace(/\s+/g,' ').trim(), empresa:'', departamento:'', equipos:[], lineas:[] });
+    return mapa.get(k);
+  };
+  const noPersona = n => /^(equipo compartido|servidor)\b/i.test(sinAcentos(n).trim());
+  equipo.forEach(e=>{
+    if((!(e.usuario||'').trim() && !e.usuarioId) || (!e.usuarioId && noPersona(e.usuario))) return;
+    const u = (e.usuarioId && usuarios.find(x=>x.id===e.usuarioId)) || porNombre.get(normNom(e.usuario)) || null;
+    const p = ficha(u, e.usuario);
+    p.equipos.push(e); p.empresa = p.empresa || e.empresa || (u&&u.empresa) || ''; p.departamento = p.departamento || e.departamento || '';
+  });
+  lineas.forEach(l=>{
+    const u = lnUsuario(l) || porNombre.get(normNom(l.usuarioNombre)) || null;
+    if(!u && !(l.usuarioNombre||'').trim()) return;
+    const p = ficha(u, l.usuarioNombre);
+    p.lineas.push(l); p.empresa = p.empresa || (u&&u.empresa) || l.usuarioEmpresa || '';
+  });
+  // Une fichas de la misma persona registrada con IDs distintos (mismo nombre y empresa)
+  const unidas = new Map();
+  [...mapa.values()].filter(p=>p.nombre).forEach(p=>{
+    const k = normNom(p.nombre)+'|'+sinAcentos(p.empresa);
+    const q = unidas.get(k);
+    if(!q){ unidas.set(k, p); return; }
+    q.equipos.push(...p.equipos); q.lineas.push(...p.lineas);
+    if(!q.usuarioId && p.usuarioId){ q.usuarioId = p.usuarioId; q.usuario = p.usuario; }
+    else if(q.usuario && p.usuario && !q.equipos.length){ q.usuarioId = p.usuarioId; q.usuario = p.usuario; }
+    q.departamento = q.departamento || p.departamento;
+  });
+  const lista = [...unidas.values()];
+  const repetidos = new Set(); const vistos = new Set();
+  lista.forEach(p=>{ const k = normNom(p.nombre); if(vistos.has(k)) repetidos.add(k); vistos.add(k); });
+  lista.forEach(p=>{
+    const partes = [p.equipos.length ? `${p.equipos.length} equipo${p.equipos.length>1?'s':''}` : '', p.lineas.length ? `${p.lineas.length} línea${p.lineas.length>1?'s':''}` : ''].filter(Boolean).join(', ');
+    p.etiqueta = `${p.nombre} — ${p.empresa||'sin empresa'} · ${partes}` + (repetidos.has(normNom(p.nombre)) && p.usuario && p.usuario.correo ? ` (${p.usuario.correo})` : '');
+  });
+  return lista.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+}
+const SAL_REQ = [['m_colaborador','Nombre'],['m_cedula','Cédula'],['m_cargo','Cargo'],['m_departamento','Departamento'],['m_empresa','Empresa'],['m_jefe','Jefe inmediato'],['m_ultimo','Último día laboral'],['m_aviso','Aviso de RRHH'],['m_cierre','Cierre de IT'],['m_equipo','Equipo que devuelve'],['m_it','Nombre de IT']];
+function marcarFaltantesSalida(){
+  const box = document.getElementById('m_ficha'); if(!box) return;
+  const faltan = [];
+  SAL_REQ.forEach(([id,n])=>{ const el = document.getElementById(id); if(!el) return; const vacio = !String(el.value||'').trim(); el.closest('.field')?.classList.toggle('falta', vacio); if(vacio) faltan.push(n); });
+  ['firmaCol','firmaIT'].forEach((id,i)=>{ const cv = document.getElementById(id); if(cv && cv.dataset.vacia==='1') faltan.push(i ? 'Firma de IT' : 'Firma del colaborador'); });
+  const fl = box.querySelector('.falta-lista');
+  if(fl) fl.innerHTML = faltan.length ? `<b>Falta completar:</b> ${faltan.map(esc).join(', ')}` : '<span style="color:var(--teal)"><b>✓ Todo completo.</b></span>';
+}
+function aplicarFichaSalida(p){
+  window.__fichaSal = p;
+  const $ = id => document.getElementById(id);
+  const setSi = (id, v) => { const el = $(id); if(el && v && !el.value) el.value = v; };
+  $('m_colaborador').value = p.nombre;
+  setSi('m_departamento', p.departamento);
+  const emp = MOV_EMPRESAS.find(x=>sinAcentos(x)===sinAcentos(p.empresa)) || MOV_EMPRESAS.find(x=>sinAcentos(p.empresa).includes(sinAcentos(x)) || sinAcentos(x).includes(sinAcentos(p.empresa)));
+  if(emp) $('m_empresa').innerHTML = opcionesLista(MOV_EMPRESAS, emp, 'Elige la empresa');
+  const comp = p.equipos.filter(e=>EQ_TIPOS.includes(e.tipo) || !e.tipo);
+  const principal = comp.find(e=>/laptop/i.test(e.tipo||'')) || comp[0] || p.equipos[0];
+  if(principal){ $('m_equipo').value = 'eq:'+principal.id; } else { $('m_equipo').value = 'ninguno'; }
+  const extras = p.equipos.filter(e=>e!==principal);
+  if(extras.length && !$('m_otro_eq').value){ $('m_otro_eq').value = extras.map(e=>[e.tipo, e.fabricante, e.equipo].filter(Boolean).join(' ')).join('; '); $('m_otro_serie').value = extras.map(e=>e.serie||'s/n').join('; '); }
+  const cel = p.lineas.find(l=>String(l.celular||'').toUpperCase()==='SI');
+  if(cel){ setSi('m_cel_modelo', cel.modelo || 'Celular corporativo'); if($('m_cel_estado').value==='N/A') $('m_cel_estado').value = 'Bueno / desgaste normal'; }
+  if(p.lineas.length) setSi('m_otros_txt', 'Línea' + (p.lineas.length>1?'s':'') + ' ' + p.lineas.map(l=>l.linea).filter(Boolean).join(', '));
+  const u = p.usuario;
+  const eqTxt = e => `${esc([e.tipo, e.fabricante, e.equipo].filter(Boolean).join(' ') || 'Equipo')} · serie ${esc(e.serie||'—')}${e.placa?` · placa ${esc(e.placa)}`:''}`;
+  $('m_ficha').innerHTML = `<div class="ficha-sal">
+    <div><b>${esc(p.nombre)}</b> · ${esc(p.empresa||'')}${p.departamento?` · ${esc(p.departamento)}`:''}${p.usuarioId?'':' <span style="color:var(--amber)">(vinculado por nombre; no está enlazado a Usuarios)</span>'}</div>
+    ${u ? `<div>Correo: ${esc(u.correo||'—')} · Gmail: ${esc(u.googleWorkspace||u.gmailPlan||'—')} · Dropbox: ${esc(u.dropbox||'—')}</div>` : ''}
+    <div style="margin-top:4px;"><b>Equipos a su nombre</b> (se marcan como devueltos al guardar):</div>
+    ${p.equipos.length ? p.equipos.map(e=>`<label><input type="checkbox" class="m_dev" value="${esc(e.id)}" checked> ${eqTxt(e)}${e===principal?' — <i>equipo principal del acta</i>':''}</label>`).join('') : '<div>Ninguno</div>'}
+    ${p.lineas.length ? `<div style="margin-top:4px;"><b>Líneas:</b> ${p.lineas.map(l=>`${esc(l.linea||'')}${String(l.celular||'').toUpperCase()==='SI'?' (con celular)':''}`).join(', ')}</div>` : ''}
+    <div class="falta-lista"></div></div>`;
+  marcarFaltantesSalida();
+}
+
 function openMovModal(tipo){
   const ent = tipo==='Entrada';
   const lista = ent
@@ -1305,18 +1389,20 @@ function openMovModal(tipo){
     : [...equipo].sort((a,b)=>sinAcentos(a.usuario).localeCompare(sinAcentos(b.usuario),'es')).map(e=>`<option value="eq:${e.id}">${esc(e.usuario)} — ${esc(e.equipo||'')} · ${esc(e.serie||'')}</option>`).join('');
   const deptos = [...new Set(equipo.map(e=>e.departamento).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   const estados = ent ? ENT_ESTADO : SAL_ESTADO;
+  const personal = ent ? [] : personalConEquipo();
   const box = document.getElementById('modalBox'); box.classList.add('ancho');
   box.innerHTML = `
     <h3>${ent ? 'Acta de entrega de equipos y accesos tecnológicos' : 'Acta de devolución de equipos y cierre de accesos'}</h3>
     <div class="acta-sec">1 · Datos del colaborador</div>
     <div class="grid2">
-      ${fIn('m_colaborador','Nombre completo')}${fIn('m_cedula','Cédula / identificación')}
+      ${ent ? fIn('m_colaborador','Nombre completo') : fIn('m_colaborador','Nombre completo (busca en el personal con equipo)','text','','list="dl_personal" autocomplete="off" placeholder="Escribe el nombre…"')}${fIn('m_cedula','Cédula / identificación')}
       ${fIn('m_cargo','Cargo')}<div class="field"><label>Departamento</label><input id="m_departamento" type="text" list="dl_deptos_m"></div>
       ${fSel('m_empresa','Empresa',MOV_EMPRESAS,'','Elige la empresa')}${fIn('m_jefe','Jefe inmediato')}
       ${ent ? fIn('m_ingreso','Fecha de ingreso (día 1)','date') + fIn('m_fecha','Fecha de entrega','date',hoyISO()) + fIn('m_rrhh','Solicitud de RRHH recibida','date')
             : fIn('m_ultimo','Último día laboral','date') + fIn('m_fecha','Fecha de devolución','date',hoyISO()) + fIn('m_aviso','Aviso de RRHH a IT','datetime-local') + fIn('m_cierre','Cierre de IT','datetime-local')}
     </div>
     <datalist id="dl_deptos_m">${deptos.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    ${ent ? '' : `<datalist id="dl_personal">${personal.map(p=>`<option value="${esc(p.etiqueta)}">`).join('')}</datalist><div id="m_ficha"></div>`}
     ${ent ? fLbl('Motivo') + fRad('m_motivo', ENT_MOTIVOS, ENT_MOTIVOS[0]) + '<div class="eq-resumen" style="margin:0 0 8px;">Meta: todo listo antes del día 1</div>'
           : fLbl('Tipo de salida') + fRad('m_motivo', SAL_TIPOS, SAL_TIPOS[0]) + '<div class="eq-resumen" style="margin:0 0 8px;">Meta: cierre en menos de 24 h</div>'}
 
@@ -1363,12 +1449,25 @@ function openMovModal(tipo){
     </div>`;
   showModal();
   prepararFirma('firmaCol'); prepararFirma('firmaIT');
+  window.__fichaSal = null;
+  if(!ent){
+    const inp = document.getElementById('m_colaborador');
+    const buscar = () => {
+      const v = sinAcentos(inp.value).trim(); if(!v) return;
+      const p = personal.find(x=>sinAcentos(x.etiqueta)===v) || (()=>{ const c = personal.filter(x=>sinAcentos(x.nombre)===v); return c.length===1 ? c[0] : null; })();
+      if(p && p!==window.__fichaSal) aplicarFichaSalida(p);
+    };
+    inp.addEventListener('input', buscar); inp.addEventListener('change', buscar);
+    document.getElementById('modalBox').addEventListener('input', marcarFaltantesSalida);
+    document.getElementById('modalBox').addEventListener('change', marcarFaltantesSalida);
+    document.getElementById('modalBox').addEventListener('pointerup', ()=>setTimeout(marcarFaltantesSalida, 50));
+  }
   document.getElementById('m_equipo').onchange = e => {
     const v = e.target.value;
     document.getElementById('m_otro').style.display = v==='otro' ? '' : 'none';
     const setEmp = emp => { document.getElementById('m_empresa').innerHTML = opcionesLista(MOV_EMPRESAS, emp, 'Elige la empresa'); };
     if(v.startsWith('eq:')){ const x = equipo.find(y=>y.id===v.slice(3)); if(!x) return;
-      document.getElementById('m_colaborador').value = x.usuario||''; document.getElementById('m_departamento').value = x.departamento||''; setEmp(x.empresa); }
+      if(!window.__fichaSal){ document.getElementById('m_colaborador').value = x.usuario||''; document.getElementById('m_departamento').value = x.departamento||''; setEmp(x.empresa); } }
     if(v.startsWith('lu:')){ const x = usadas.find(y=>y.id===v.slice(3)); if(!x) return;
       setEmp(x.empresa); document.getElementById('m_lap_estado').value = 'Usado en óptimas condiciones'; }
   };
@@ -1526,6 +1625,13 @@ window.guardarMov = async function(tipo){
     firmaIT: document.getElementById('firmaIT').toDataURL('image/png'),
     estadoDropbox: 'Pendiente', dropboxPath: '', registrado: new Date().toISOString()
   };
+  const fichaSal = !ent && window.__fichaSal && normNom(window.__fichaSal.nombre)===normNom(m.colaborador) ? window.__fichaSal : null;
+  const extrasDev = fichaSal ? gChk('m_dev').map(id=>equipo.find(x=>x.id===id)).filter(x=>x && x!==origen) : [];
+  if(fichaSal){
+    m.usuarioId = fichaSal.usuarioId || '';
+    m.equiposDevueltos = [origen, ...extrasDev].filter(Boolean).map(e=>({id:e.id, tipo:e.tipo, marca:e.fabricante, modelo:e.equipo, serie:e.serie, placa:e.placa||''}));
+    m.lineasAsociadas = fichaSal.lineas.map(l=>({id:l.id, linea:l.linea, celular:l.celular}));
+  }
   const btn = document.getElementById('btnGuardarActa'); btn.disabled = true; btn.textContent = 'Guardando…';
   const eqAntes = equipo, luAntes = usadas, mvAntes = movs;
   const empNexo = m.empresa;
@@ -1542,6 +1648,13 @@ window.guardarMov = async function(tipo){
       usadas = [...usadas, { id: uid('lu'), empresa: empNexo, fabricante: lap.marca||'', equipo: lap.modelo||'', serie: lap.serie||'', procesador: lap.procesador||'', ram: lap.ram||'', disco: lap.disco||'',
         ultimoUsuario: m.colaborador, procedencia: `Salida de personal · acta ${m.numero}`, condicion: cond, notas: m.destino }];
     }
+  }
+  if(!ent && extrasDev.length){
+    equipo = equipo.filter(x=>!extrasDev.includes(x));
+    extrasDev.filter(e=>/laptop/i.test(e.tipo||'')).forEach(e=>{
+      usadas = [...usadas, { id: uid('lu'), empresa: empNexo, fabricante: e.fabricante||'', equipo: e.equipo||'', serie: e.serie||'', procesador: e.procesador||'', ram: e.ram||'', disco: e.disco||'',
+        ultimoUsuario: m.colaborador, procedencia: `Salida de personal · acta ${m.numero}`, condicion: 'Por revisar', notas: m.destino }];
+    });
   }
   movs = [...movs, m];
   const ok = await Storage.set('movimientos', movs) && await Storage.set('equipos', equipo) && await Storage.set('laptops_usadas', usadas);
