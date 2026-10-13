@@ -213,6 +213,7 @@
   <div class="tabs">
     <div class="tab active" data-view="licencias">RESUMEN Y LICENCIAS POR EMPRESA</div>
     <div class="tab" data-view="equipos">EQUIPOS ACTIVOS</div>
+    <div class="tab" data-view="lineas">LÍNEAS CELULARES</div>
     <div class="tab" data-view="usadas">LAPTOPS DISPONIBLES</div>
     <div class="tab" data-view="movs">ENTRADAS Y SALIDAS</div>
     <div class="tab" data-view="usuarios">USUARIOS — LICENCIAS GMAIL Y DROPBOX</div>
@@ -294,10 +295,31 @@
       <div class="table-scroll">
         <table>
           <thead><tr>
-            <th>Usuario</th><th>Empresa</th><th>Departamento</th><th>Tipo</th><th>Equipo</th><th>Serie</th>
+            <th>Usuario</th><th>Línea</th><th>Empresa</th><th>Departamento</th><th>Tipo</th><th>Equipo</th><th>Serie</th>
             <th>Procesador</th><th>RAM</th><th>Disco</th><th>Ubicación</th><th>Estado</th><th></th>
           </tr></thead>
           <tbody id="eqTbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- LINEAS VIEW -->
+    <div id="view-lineas" style="display:none;">
+      <div class="stats" id="lnStats"></div>
+      <div class="eq-resumen" id="lnResumen"></div>
+      <div class="controls">
+        <select id="lnGrupoFilter" aria-label="Grupo"><option value="">Todos los grupos</option></select>
+        <select id="lnAlertaFilter" aria-label="Alerta"><option value="">Todas las alertas</option></select>
+        <select id="lnMapeoFilter" aria-label="Enlace con usuario"><option value="">Con y sin usuario</option><option value="pend">Por revisar (sin usuario o nombre distinto)</option><option value="ok">Enlazadas a un usuario</option></select>
+        <input type="text" id="lnSearch" placeholder="Buscar por número, persona, equipo o modelo…">
+        <button id="btnAddLn">+ Nueva línea</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>Grupo</th><th>Línea</th><th>Asignada a (factura)</th><th>Usuario NexoIT</th><th>Equipo asignado</th><th>Celular</th>
+            <th>Precio</th><th>Renovación</th><th>Alerta</th><th>Acción</th><th></th>
+          </tr></thead>
+          <tbody id="lnTbody"></tbody>
         </table>
       </div>
     </div>
@@ -423,6 +445,7 @@ const Storage = {
     try{
       await window.__sbSet(key, value);
       setSync('ok', '● Guardado ' + new Date().toLocaleTimeString('es-PA',{hour:'2-digit',minute:'2-digit'}));
+      if(['usuarios','equipos','lineas'].includes(key) && typeof recargarEnlaces==='function') recargarEnlaces();
       return true;
     }catch(e){
       console.error('Supabase set failed', e); setSync('err');
@@ -631,13 +654,14 @@ function renderEqTable(){
     if(tipoF && e.tipo !== tipoF) return false;
     if(empresaF && (e.empresa||'Sin empresa asignada') !== empresaF) return false;
     if(estadoF && e.estado !== estadoF) return false;
-    if(q && ![e.usuario,e.serie,e.placa,e.equipo||e.modelo,e.departamento,e.procesador,e.ubicacion].some(v=>sinAcentos(v).includes(q))) return false;
+    if(q && ![e.usuario,e.telefono,e.serie,e.placa,e.equipo||e.modelo,e.departamento,e.procesador,e.ubicacion].some(v=>sinAcentos(v).includes(q))) return false;
     return true;
   }).sort((a,b)=> (orden[a.empresa||'Sin empresa asignada']??99)-(orden[b.empresa||'Sin empresa asignada']??99) || sinAcentos(a.usuario).localeCompare(sinAcentos(b.usuario),'es'));
-  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="12" class="empty">Ningún equipo coincide con estos filtros. Cambia el filtro o la búsqueda.</td></tr>`; return; }
+  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="13" class="empty">Ningún equipo coincide con estos filtros. Cambia el filtro o la búsqueda.</td></tr>`; return; }
   tbody.innerHTML = rows.map(e=>`
     <tr>
       <td><b>${esc(e.usuario)}</b></td>
+      <td class="mono" style="font-size:11px;white-space:nowrap;">${esc(e.telefono||'—')}</td>
       <td><span class="tag">${esc(e.empresa||'Sin empresa asignada')}</span></td>
       <td style="font-size:11px;">${esc(e.departamento||'—')}</td>
       <td style="font-size:11px;">${esc(e.tipo||'—')}</td>
@@ -734,7 +758,8 @@ function actualizarMeta(){
     <span><b>${usuarios.length}</b> usuarios</span>
     <span><b>${usuarios.filter(tieneGmail).length}</b> Gmail · <b>${usuarios.filter(tieneDropbox).length}</b> Dropbox en uso</span>
     <span><b>${licenses.length}</b> licencias/herramientas</span>
-    <span><b>${sistemas.length}</b> credenciales</span>`;
+    <span><b>${sistemas.length}</b> credenciales</span>
+    <span><b>${lineas.length}</b> líneas celulares</span>`;
 }
 /* Mantiene todas las pestañas sincronizadas después de cualquier cambio */
 function sincronizar(){
@@ -777,8 +802,231 @@ document.querySelectorAll('.tab').forEach(tab=>{
     document.getElementById('view-movs').style.display = view==='movs' ? '' : 'none';
     document.getElementById('view-usuarios').style.display = view==='usuarios' ? '' : 'none';
     document.getElementById('view-sistemas').style.display = view==='sistemas' ? '' : 'none';
+    document.getElementById('view-lineas').style.display = view==='lineas' ? '' : 'none';
   });
 });
+
+/* ---------- LÍNEAS CELULARES ----------
+   Cada línea se enlaza a un usuario por su ID. La base de datos mantiene el enlace:
+   si cambias el nombre en Usuarios o reasignas un equipo, la línea y el equipo se actualizan solos.
+------------------------------------------------------------------------------------------------ */
+let lineas = [];
+const LN_ACCIONES = ['Renovar','No renovar','Cancelar','Por definir'];
+const LN_ALERTAS  = ['Vencida','Renovar ya','Próxima','Al día','Sin fecha','Cancelar','No renovar'];
+const LN_DIAS_YA = 30, LN_DIAS_PROX = 90, LN_CICLO_MESES = 18;
+const LN_ESTILO = {'Vencida':'background:#F8D7DA;color:#842029;','Renovar ya':'background:#FFE5CC;color:#8A4B00;',
+  'Próxima':'background:#FFF3BF;color:#6B5900;','Al día':'','Sin fecha':'background:#E7E1F5;color:#4B2C82;',
+  'Cancelar':'background:#E2E3E5;color:#41464B;','No renovar':'background:#E2E3E5;color:#41464B;'};
+function lnHoy(){ const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function lnFechaObj(s){ if(!s) return null; const [y,m,d] = String(s).slice(0,10).split('-').map(Number); return (y&&m&&d) ? new Date(y,m-1,d) : null; }
+function lnDias(l){ const f = lnFechaObj(l.fechaRenovacion); return f ? Math.round((f - lnHoy())/86400000) : null; }
+function lnAlerta(l){
+  const a = l.accion || 'Renovar';
+  if(a==='Cancelar' || a==='No renovar') return a;
+  const d = lnDias(l);
+  if(d===null) return 'Sin fecha';
+  if(d < 0) return 'Vencida';
+  if(d <= LN_DIAS_YA) return 'Renovar ya';
+  if(d <= LN_DIAS_PROX) return 'Próxima';
+  return 'Al día';
+}
+const lnFecha = s => s ? String(s).slice(0,10).split('-').reverse().join('/') : '—';
+const lnMoney = n => (n===undefined || n===null || n==='') ? '—' : '$' + Number(n).toFixed(2);
+const lnNombre = u => u ? ((u.nombre||'') + ' ' + (u.apellido||'')).trim() : '';
+const lnUsuario = l => l.usuarioId ? usuarios.find(u=>u.id===l.usuarioId) : null;
+const lnPendiente = l => !lnUsuario(l) || l.mapeo==='Aproximado' || l.mapeo==='Ambiguo';
+function lnEquipos(l){
+  if(!l.usuarioId) return [];
+  return equipo.filter(e=>e.usuarioId===l.usuarioId && e.estado==='Asignado');
+}
+function lnSumarMeses(iso, meses){
+  const f = lnFechaObj(iso); if(!f) return '';
+  const r = new Date(f.getFullYear(), f.getMonth()+meses, 1);
+  r.setDate(Math.min(f.getDate(), new Date(r.getFullYear(), r.getMonth()+1, 0).getDate()));
+  return `${r.getFullYear()}-${String(r.getMonth()+1).padStart(2,'0')}-${String(r.getDate()).padStart(2,'0')}`;
+}
+
+function renderLnStats(){
+  const grupoF = document.getElementById('lnGrupoFilter').value;
+  const base = grupoF ? lineas.filter(l=>l.grupo===grupoF) : lineas;
+  const c = a => base.filter(l=>lnAlerta(l)===a).length;
+  const activas = base.filter(l=>(l.accion||'Renovar')!=='Cancelar');
+  const costo = activas.reduce((s,l)=>s+(Number(l.precioActual)||0),0);
+  const costoRen = activas.reduce((s,l)=>s+(Number(l.precioRenovacion ?? l.precioActual)||0),0);
+  document.getElementById('lnStats').innerHTML = `
+    <div class="stat"><div class="num">${base.length}</div><div class="lbl">${grupoF ? 'Líneas de '+esc(grupoF) : 'Líneas'}</div></div>
+    <div class="stat"><div class="num" style="color:#842029;">${c('Vencida')}</div><div class="lbl">Vencidas</div></div>
+    <div class="stat"><div class="num" style="color:#8A4B00;">${c('Renovar ya')}</div><div class="lbl">Renovar en ${LN_DIAS_YA} días</div></div>
+    <div class="stat"><div class="num" style="color:#6B5900;">${c('Próxima')}</div><div class="lbl">Próximas (${LN_DIAS_PROX} días)</div></div>
+    <div class="stat"><div class="num">${base.filter(lnPendiente).length}</div><div class="lbl">Por revisar usuario</div></div>
+    <div class="stat"><div class="num">${lnMoney(costo)}</div><div class="lbl">Costo mensual${costoRen<costo ? ' · renovado '+lnMoney(costoRen) : ''}</div></div>
+  `;
+  // Próximo bloque de renovaciones
+  const futuras = base.filter(l=>(l.accion||'Renovar')==='Renovar' && lnDias(l)!==null && lnDias(l)>=0)
+                      .sort((a,b)=>lnDias(a)-lnDias(b));
+  const box = document.getElementById('lnResumen');
+  if(!futuras.length){ box.style.display='none'; return; }
+  const mes = l => String(l.fechaRenovacion).slice(0,7);
+  const m0 = mes(futuras[0]);
+  const bloque = futuras.filter(l=>mes(l)===m0);
+  const porGrupo = {}; bloque.forEach(l=>{ porGrupo[l.grupo||'Sin grupo']=(porGrupo[l.grupo||'Sin grupo']||0)+1; });
+  const nombreMes = lnFechaObj(m0+'-01').toLocaleDateString('es-PA',{month:'long',year:'numeric'});
+  box.style.display='';
+  box.innerHTML = `<b>Próximo bloque de renovación:</b> ${bloque.length} línea${bloque.length>1?'s':''} en ${esc(nombreMes)} (desde el ${lnFecha(futuras[0].fechaRenovacion)}) — `
+    + Object.entries(porGrupo).sort((a,b)=>b[1]-a[1]).map(([g,n])=>`${esc(g)} ${n}`).join(', ') + '.'
+    + (c('Vencida') ? ` Además hay <b>${c('Vencida')}</b> vencidas pendientes.` : '');
+}
+
+function renderLnTable(){
+  const grupoF = document.getElementById('lnGrupoFilter').value;
+  const alertaF = document.getElementById('lnAlertaFilter').value;
+  const mapeoF = document.getElementById('lnMapeoFilter').value;
+  const q = sinAcentos(document.getElementById('lnSearch').value.trim());
+  const prio = Object.fromEntries(LN_ALERTAS.map((a,i)=>[a,i]));
+  const rows = lineas.filter(l=>{
+    if(grupoF && l.grupo!==grupoF) return false;
+    if(alertaF && lnAlerta(l)!==alertaF) return false;
+    if(mapeoF==='pend' && !lnPendiente(l)) return false;
+    if(mapeoF==='ok' && lnPendiente(l)) return false;
+    if(q){
+      const u = lnUsuario(l);
+      const txt = [l.linea,l.servicio,l.grupo,l.modelo,l.comentarios,lnNombre(u),u&&u.correo,...lnEquipos(l).map(e=>(e.placa||'')+' '+(e.serie||'')+' '+(e.equipo||''))];
+      if(!txt.some(v=>sinAcentos(v).includes(q))) return false;
+    }
+    return true;
+  }).sort((a,b)=> prio[lnAlerta(a)]-prio[lnAlerta(b)] || (lnDias(a)??99999)-(lnDias(b)??99999) || String(a.grupo).localeCompare(String(b.grupo),'es'));
+  const tbody = document.getElementById('lnTbody');
+  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="11" class="empty">Ninguna línea coincide con estos filtros.</td></tr>`; return; }
+  tbody.innerHTML = rows.map(l=>{
+    const u = lnUsuario(l), a = lnAlerta(l), d = lnDias(l), eqs = lnEquipos(l);
+    const usuarioHtml = u
+      ? `<b>${esc(lnNombre(u))}</b><div style="font-size:10.5px;color:var(--ink-soft);">${esc(u.empresa||'')}</div>${l.mapeo==='Aproximado'?'<span class="tag rust" title="El nombre en la factura es distinto: confirma que es esta persona">Confirmar</span>':''}`
+      : `<span class="tag rust">${l.mapeo==='Ambiguo'?'Elegir usuario':'Sin usuario'}</span>`;
+    const eqHtml = eqs.length ? eqs.map(e=>`<div>${esc(e.placa||e.serie||'')}${e.equipo?' · '+esc(e.equipo):''}</div>`).join('') : '<span style="color:var(--ink-soft)">—</span>';
+    const ren = (l.precioRenovacion!==undefined && l.precioRenovacion!=='' && Number(l.precioRenovacion)!==Number(l.precioActual)) ? `<div style="color:var(--teal);">→ ${lnMoney(l.precioRenovacion)}</div>` : '';
+    const dTxt = d===null ? '' : (d<0 ? `hace ${-d} días` : (d===0 ? 'hoy' : `en ${d} días`));
+    return `
+    <tr>
+      <td><span class="tag">${esc(l.grupo||'—')}</span></td>
+      <td class="mono" style="white-space:nowrap;"><b>${esc(l.linea)}</b><div style="font-size:10px;color:var(--ink-soft);">${esc(l.cuenta||'')}</div></td>
+      <td style="font-size:12px;">${esc(l.servicio||'—')}</td>
+      <td>${usuarioHtml}</td>
+      <td style="font-size:11px;">${eqHtml}</td>
+      <td style="font-size:11px;">${l.celular==='NO' ? 'Sin equipo' : esc(l.modelo || (l.celular==='SI'?'Sí':'—'))}</td>
+      <td class="mono" style="font-size:11px;white-space:nowrap;">${lnMoney(l.precioActual)}${ren}</td>
+      <td class="mono" style="font-size:11px;white-space:nowrap;">${lnFecha(l.fechaRenovacion)}<div style="color:var(--ink-soft);">${dTxt}</div></td>
+      <td><span class="tag" style="${LN_ESTILO[a]||''}">${esc(a)}</span></td>
+      <td style="font-size:11px;">${esc(l.accion||'Renovar')}${l.comentarios?`<div style="color:var(--ink-soft);">${esc(l.comentarios)}</div>`:''}</td>
+      <td class="row-actions">
+        <button class="secondary" onclick="editLn('${esc(l.id)}')">Editar</button>
+        <button class="danger" onclick="delLn('${esc(l.id)}')">Eliminar</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+window.editLn = function(id){ openLnModal(lineas.find(l=>l.id===id)); }
+window.delLn = async function(id){
+  const l = lineas.find(x=>x.id===id); if(!l) return;
+  if(!confirm(`¿Eliminar la línea ${l.linea}? Si solo se va a cancelar, mejor cambia la acción a "Cancelar".`)) return;
+  lineas = lineas.filter(x=>x.id!==id);
+  const ok = await Storage.set('lineas', lineas);
+  refreshLnUI(); if(ok) toast('Línea eliminada');
+}
+
+function openLnModal(existing){
+  const isEdit = !!existing;
+  const l = existing || {id:uid('ln'), linea:'', cuenta:'', grupo:document.getElementById('lnGrupoFilter').value, servicio:'', usuarioId:'', celular:'SI', modelo:'', precioActual:'', precioRenovacion:'', fechaContrato:'', fechaRenovacion:'', accion:'Renovar', comentarios:''};
+  const grupos = [...new Set(lineas.map(x=>x.grupo).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const cuentas = [...new Set(lineas.map(x=>x.cuenta).filter(Boolean))];
+  const us = [...usuarios].sort((a,b)=> String(a.empresa).localeCompare(String(b.empresa),'es') || lnNombre(a).localeCompare(lnNombre(b),'es'));
+  const optUs = '<option value="">— Sin usuario (línea de servicio o persona no registrada) —</option>' +
+    us.map(u=>`<option value="${esc(u.id)}" ${u.id===l.usuarioId?'selected':''}>${esc(u.empresa)} · ${esc(lnNombre(u))} (${esc(u.correo||'sin correo')})</option>`).join('');
+  const aviso = l.mapeo==='Aproximado' ? `<div class="eq-resumen" style="margin:0 0 10px;">En la factura aparece como <b>${esc(l.servicio)}</b>. Confirma que el usuario elegido es correcto y guarda.</div>`
+              : (l.mapeo==='Ambiguo' ? `<div class="eq-resumen" style="margin:0 0 10px;">Hay más de un usuario con este nombre: elige el correcto.</div>` : '');
+  document.getElementById('modalBox').innerHTML = `
+    <h3>${isEdit?'Editar línea':'Nueva línea'}</h3>
+    ${aviso}
+    <div class="field"><label>Número de línea</label><input id="n_linea" type="text" inputmode="numeric" value="${esc(l.linea)}" placeholder="Ej. 66112788"></div>
+    <div class="field"><label>Cuenta +Móvil</label><input id="n_cuenta" type="text" list="dl_cuentas" value="${esc(l.cuenta)}"></div>
+    <datalist id="dl_cuentas">${cuentas.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="field"><label>Grupo (quién la paga)</label><input id="n_grupo" type="text" list="dl_grupos" value="${esc(l.grupo)}" placeholder="HAUS, SEMAH, COLINAS…"></div>
+    <datalist id="dl_grupos">${grupos.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="field"><label>Asignada a (como sale en la factura)</label><input id="n_servicio" type="text" value="${esc(l.servicio)}"></div>
+    <div class="field"><label>Usuario NexoIT</label><select id="n_usuario">${optUs}</select></div>
+    <div class="field"><label>¿Tiene celular de la empresa?</label><select id="n_celular">${opcionesLista(['SI','NO'], l.celular||'SI', '')}</select></div>
+    <div class="field"><label>Modelo del celular</label><input id="n_modelo" type="text" value="${esc(l.modelo)}" placeholder="Ej. Samsung A17, iPhone"></div>
+    <div class="field"><label>Precio actual (USD/mes)</label><input id="n_precio" type="number" step="0.01" value="${esc(l.precioActual)}"></div>
+    <div class="field"><label>Precio de renovación (USD/mes)</label><input id="n_precioRen" type="number" step="0.01" value="${esc(l.precioRenovacion)}"></div>
+    <div class="field"><label>Fecha de contrato</label><input id="n_fContrato" type="date" value="${esc(String(l.fechaContrato||'').slice(0,10))}"></div>
+    <div class="field"><label>Fecha de renovación <span style="text-transform:none;font-weight:normal;">(si la dejas vacía: contrato + ${LN_CICLO_MESES} meses)</span></label><input id="n_fRenov" type="date" value="${esc(String(l.fechaRenovacion||'').slice(0,10))}"></div>
+    <div class="field"><label>Acción</label><select id="n_accion">${opcionesLista(LN_ACCIONES, l.accion||'Renovar', '')}</select></div>
+    <div class="field"><label>Comentarios</label><input id="n_coment" type="text" value="${esc(l.comentarios)}"></div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancelar</button>
+      <button onclick="saveLn('${esc(l.id)}', ${isEdit})">${isEdit?'Guardar cambios':'Agregar línea'}</button>
+    </div>
+  `;
+  showModal();
+}
+
+window.saveLn = async function(id, isEdit){
+  const v = k => document.getElementById(k).value.trim();
+  const num = k => v(k)==='' ? null : Math.round(Number(v(k))*100)/100;
+  const previo = lineas.find(x=>x.id===id) || {};
+  const linea = v('n_linea').replace(/[\s-]/g,'');
+  if(!linea){ alert('Escribe el número de línea.'); return; }
+  if(lineas.some(x=>x.id!==id && String(x.linea)===linea)){ alert('Esa línea ya existe en la lista.'); return; }
+  const usuarioId = v('n_usuario');
+  let mapeo = previo.mapeo || '';
+  if(!usuarioId) mapeo = 'Sin usuario';
+  else if(usuarioId!==previo.usuarioId || mapeo!=='Exacto') mapeo = 'Confirmado';
+  let fechaRenovacion = v('n_fRenov');
+  if(!fechaRenovacion && v('n_fContrato')) fechaRenovacion = lnSumarMeses(v('n_fContrato'), LN_CICLO_MESES);
+  const data = {
+    id, linea, cuenta: v('n_cuenta'), grupo: v('n_grupo').toUpperCase(), servicio: v('n_servicio'),
+    usuarioId, mapeo, celular: v('n_celular'), modelo: v('n_modelo'),
+    precioActual: num('n_precio'), precioRenovacion: num('n_precioRen'),
+    fechaContrato: v('n_fContrato'), fechaRenovacion, accion: v('n_accion'), comentarios: v('n_coment')
+  };
+  const limpio = o => Object.fromEntries(Object.entries(o).filter(([,x])=>x!=='' && x!==null && x!==undefined));
+  const sinCalculados = ({usuarioNombre, usuarioEmpresa, equiposAsignados, ...r}) => r;
+  if(isEdit){ lineas = lineas.map(x=>x.id!==id ? x : limpio({...sinCalculados(x), usuarioId:'', fechaContrato:'', fechaRenovacion:'', comentarios:'', modelo:'', ...data})); }
+  else { lineas.push(limpio(data)); }
+  const ok = await Storage.set('lineas', lineas);
+  closeModal(); refreshLnUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Línea agregada ✓');
+}
+
+function refreshLnUI(){
+  const sG = document.getElementById('lnGrupoFilter'), vG = sG.value;
+  const n = {}; lineas.forEach(l=>{ const g=l.grupo||'Sin grupo'; n[g]=(n[g]||0)+1; });
+  sG.innerHTML = '<option value="">Todos los grupos</option>' + Object.entries(n).sort((a,b)=>b[1]-a[1]).map(([g,c])=>`<option value="${esc(g)}">${esc(g)} (${c})</option>`).join('');
+  sG.value = vG;
+  const sA = document.getElementById('lnAlertaFilter'), vA = sA.value;
+  sA.innerHTML = '<option value="">Todas las alertas</option>' + LN_ALERTAS.map(a=>[a, lineas.filter(l=>lnAlerta(l)===a).length]).filter(([,c])=>c>0).map(([a,c])=>`<option value="${esc(a)}">${esc(a)} (${c})</option>`).join('');
+  sA.value = vA;
+  renderLnStats(); renderLnTable(); if(typeof actualizarMeta==='function') actualizarMeta();
+}
+/* Trae de la nube los equipos y líneas ya enlazados (la base los actualiza al guardar usuarios, equipos o líneas) */
+let __recargando = null;
+async function recargarEnlaces(){
+  if(__recargando) return __recargando;
+  __recargando = (async()=>{
+    try{
+      const [eq, ln] = await Promise.all([window.__sbGet('equipos'), window.__sbGet('lineas')]);
+      if(Array.isArray(eq)) equipo = eq.map(limpiarEquipo);
+      if(Array.isArray(ln)) lineas = ln;
+      refreshEqUI(); refreshLnUI();
+    }catch(e){ console.error('No se pudieron recargar equipos y líneas', e); }
+    finally{ __recargando = null; }
+  })();
+  return __recargando;
+}
+document.getElementById('lnGrupoFilter').onchange = ()=>{ renderLnStats(); renderLnTable(); };
+document.getElementById('lnAlertaFilter').onchange = renderLnTable;
+document.getElementById('lnMapeoFilter').onchange = renderLnTable;
+document.getElementById('lnSearch').oninput = renderLnTable;
+document.getElementById('btnAddLn').onclick = ()=>openLnModal(null);
 
 /* ---------- LAPTOPS DISPONIBLES ---------- */
 let usadas = [];
@@ -1544,6 +1792,10 @@ document.getElementById('btnRespaldo').onclick = function(){
   hoja(usuarios, [['nombre','Nombre'],['apellido','Apellido'],['correo','Correo'],['empresa','Empresa'],['googleWorkspace','Google Workspace'],['dropbox','Dropbox']], 'Usuarios');
   hoja(licenses, [['nombre','Herramienta'],['proveedor','Proveedor'],['empresa','Empresa'],['asientos','Asientos'],['costo','Costo'],['frecuencia','Frecuencia'],['categoria','Categoría']], 'Licencias');
   hoja(sistemas, [['empresa','Empresa'],['rubro','Rubro'],['detalle','Servicio'],['usuario','Usuario'],['password','Contraseña'],['link','Link']], 'Sistemas');
+  hoja(lineas, [['grupo','Grupo'],['linea','Línea'],['cuenta','Cuenta'],['servicio','Asignada a (factura)'],[r=>lnNombre(lnUsuario(r)),'Usuario NexoIT'],
+    [r=>{const u=lnUsuario(r); return u?u.correo||'':'';},'Correo'],[r=>lnEquipos(r).map(e=>(e.placa||e.serie||'')+' '+(e.equipo||'')).join('; '),'Equipo asignado'],
+    ['celular','Celular'],['modelo','Modelo'],['precioActual','Precio actual'],['precioRenovacion','Precio renovación'],
+    ['fechaContrato','Fecha contrato'],['fechaRenovacion','Fecha renovación'],[r=>lnAlerta(r),'Alerta'],['accion','Acción'],['comentarios','Comentarios']], 'Líneas');
   const f = new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb, `Respaldo_NexosIT_${f}.xlsx`);
   toast('Respaldo descargado ✓');
@@ -1610,9 +1862,11 @@ async function init(){
   if(usuarios === null){ usuarios = []; }
   sistemas = await Storage.get('sistemas', null);
   if(sistemas === null){ sistemas = []; }
+  lineas = await Storage.get('lineas', null);
+  if(lineas === null){ lineas = []; }
 
   actualizarMeta();
-  refreshLicUI(); refreshEqUI(); refreshLuUI(); refreshMovUI(); refreshUserUI(); refreshSysUI();
+  refreshLicUI(); refreshEqUI(); refreshLuUI(); refreshMovUI(); refreshUserUI(); refreshSysUI(); refreshLnUI();
   if(readOnly){ setSync('off'); toast('⚠ No hay conexión con la base de datos: los cambios no se guardarán'); }
   else setSync('ok','● Conectado a la nube');
 }
