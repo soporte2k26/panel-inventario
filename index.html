@@ -180,7 +180,37 @@
     transition:opacity .25s;z-index:60;
   }
   .toast.show{opacity:1;}
+
+  /* ===== Presentación v2: una sola tipografía, menos ruido ===== */
+  :root{ --sans:"Inter","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif; --mono:"IBM Plex Mono","SF Mono",Menlo,Consolas,monospace; }
+  body{font-family:var(--sans);font-size:14px;}
+  .mono{font-family:var(--mono);font-size:12px;}
+  .masthead{margin-bottom:22px;}
+  .masthead h1{font-family:var(--sans);font-weight:800;letter-spacing:-.02em;}
+  .masthead .sub{font-family:var(--sans);font-size:13px;}
+  .stamp, .masthead .stamp{transform:none;border:none;padding:0;font-family:var(--sans);font-size:11.5px;letter-spacing:0;color:rgba(250,248,242,.75);}
+  .meta-row{display:none;}
+  .tabs{flex-wrap:wrap;}
+  .tab{font-family:var(--sans);font-size:13.5px;font-weight:500;padding:10px 18px;white-space:nowrap;}
+  .tab.active{font-weight:700;}
+  select, input, textarea, button, .toast, .field label, .acta-sec, th, .tag, .modal h3, .res-line b, .stat .num{font-family:var(--sans);}
+  th{font-size:11px;font-weight:600;letter-spacing:.04em;}
+  td{font-variant-numeric:tabular-nums;}
+  button{font-size:13px;font-weight:600;letter-spacing:0;}
+  .field label{font-size:11.5px;font-weight:600;}
+  .tag{font-size:11.5px;font-weight:600;}
+  .stat .num{font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+  .stat .lbl{font-weight:600;}
+  .modal h3{font-weight:700;}
+  .lic-card .lic-emp{font-size:12px;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:10px;}
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;}
+  .kpi .n{font-size:22px;font-weight:800;line-height:1.1;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+  .kpi .n small{font-size:12px;font-weight:600;color:var(--ink-soft);letter-spacing:0;}
+  .kpi .l{font-size:11px;color:var(--ink-soft);margin-top:2px;text-transform:uppercase;letter-spacing:.04em;font-weight:600;}
+  .ln-sub{font-size:11px;color:var(--ink-soft);margin-top:2px;}
 </style>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
 <div id="masterGate" style="position:fixed;inset:0;background:radial-gradient(circle at 8% 8%, rgba(244,121,32,0.20), transparent 42%), linear-gradient(160deg, #1A1A1A 0%, #262626 32%, #3A3A3A 52%, #8A4A18 80%, #F47920 100%);display:flex;align-items:center;justify-content:center;z-index:100;">
@@ -216,13 +246,13 @@
   <div class="meta-row" id="metaRow"></div>
 
   <div class="tabs">
-    <div class="tab active" data-view="licencias">RESUMEN Y LICENCIAS POR EMPRESA</div>
-    <div class="tab" data-view="equipos">EQUIPOS ACTIVOS</div>
-    <div class="tab" data-view="lineas">LÍNEAS CELULARES</div>
-    <div class="tab" data-view="usadas">LAPTOPS DISPONIBLES</div>
-    <div class="tab" data-view="movs">ENTRADAS Y SALIDAS</div>
-    <div class="tab" data-view="usuarios">USUARIOS — LICENCIAS GMAIL Y DROPBOX</div>
-    <div class="tab" data-view="sistemas">SISTEMAS DE CREDENCIALES</div>
+    <div class="tab active" data-view="licencias">Resumen</div>
+    <div class="tab" data-view="equipos">Equipos</div>
+    <div class="tab" data-view="lineas">Líneas</div>
+    <div class="tab" data-view="usadas">Laptops libres</div>
+    <div class="tab" data-view="movs">Entradas y salidas</div>
+    <div class="tab" data-view="usuarios">Usuarios</div>
+    <div class="tab" data-view="sistemas">Credenciales</div>
   </div>
 
   <div class="panel">
@@ -321,8 +351,8 @@
       <div class="table-scroll">
         <table>
           <thead><tr>
-            <th>Grupo</th><th>Línea</th><th>Asignada a (factura)</th><th>Usuario NexoIT</th><th>Equipo asignado</th><th>Celular</th>
-            <th>Precio</th><th>Renovación</th><th>Alerta</th><th>Acción</th><th></th>
+            <th>Renovación</th><th>Línea</th><th>Usuario</th><th>Grupo</th><th>Equipo asignado</th><th>Celular</th>
+            <th>Precio / mes</th><th>Acción</th><th></th>
           </tr></thead>
           <tbody id="lnTbody"></tbody>
         </table>
@@ -519,10 +549,12 @@ function renderLicStats(){
     const cls = (uso, con) => con && uso > con ? 'neg' : '';
     return `<div class="stat lic-card ${sel===emp?'sel':''}" onclick="filtrarLicEmpresa('${emp}')">
       <div class="lic-emp">${esc(emp.toUpperCase())}</div>
-      <div class="res-line"><b>${r.equipos}</b> equipos &nbsp;·&nbsp; <b>${r.usuarios}</b> usuarios</div>
-      <div class="res-line">Gmail: <b class="${cls(r.gmail,r.gmailContr)}">${r.gmail}</b> en uso / ${r.gmailContr} contratadas</div>
-      <div class="res-line">Dropbox: <b class="${cls(r.dropbox,r.dropboxContr)}">${r.dropbox}</b> en uso / ${r.dropboxContr} contratadas</div>
-      <div class="lic-plan">${r.herramientas} herramienta(s) registrada(s)</div>
+      <div class="kpis">
+        <div class="kpi"><div class="n">${r.equipos}</div><div class="l">Equipos</div></div>
+        <div class="kpi"><div class="n">${r.usuarios}</div><div class="l">Usuarios</div></div>
+        <div class="kpi" title="En uso / contratadas"><div class="n ${cls(r.gmail,r.gmailContr)}">${r.gmail}<small> / ${r.gmailContr}</small></div><div class="l">Gmail</div></div>
+        <div class="kpi" title="En uso / contratadas"><div class="n ${cls(r.dropbox,r.dropboxContr)}">${r.dropbox}<small> / ${r.dropboxContr}</small></div><div class="l">Dropbox</div></div>
+      </div>
     </div>`;
   }).join('');
 }
@@ -901,27 +933,26 @@ function renderLnTable(){
     return true;
   }).sort((a,b)=> prio[lnAlerta(a)]-prio[lnAlerta(b)] || (lnDias(a)??99999)-(lnDias(b)??99999) || String(a.grupo).localeCompare(String(b.grupo),'es'));
   const tbody = document.getElementById('lnTbody');
-  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="11" class="empty">Ninguna línea coincide con estos filtros.</td></tr>`; return; }
+  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="9" class="empty">Ninguna línea coincide con estos filtros.</td></tr>`; return; }
   tbody.innerHTML = rows.map(l=>{
     const u = lnUsuario(l), a = lnAlerta(l), d = lnDias(l), eqs = lnEquipos(l);
     const usuarioHtml = u
-      ? `<b>${esc(lnNombre(u))}</b><div style="font-size:10.5px;color:var(--ink-soft);">${esc(u.empresa||'')}</div>${l.mapeo==='Aproximado'?'<span class="tag rust" title="El nombre en la factura es distinto: confirma que es esta persona">Confirmar</span>':''}`
+      ? `<b>${esc(lnNombre(u))}</b><div class="ln-sub">${esc(u.empresa||'')}</div>${l.mapeo==='Aproximado'?'<span class="tag rust" title="El nombre en la factura es distinto: confirma que es esta persona">Confirmar</span>':''}`
       : `<span class="tag rust">${l.mapeo==='Ambiguo'?'Elegir usuario':'Sin usuario'}</span>`;
     const eqHtml = eqs.length ? eqs.map(e=>`<div>${esc(e.placa||e.serie||'')}${e.equipo?' · '+esc(e.equipo):''}</div>`).join('') : '<span style="color:var(--ink-soft)">—</span>';
     const ren = (l.precioRenovacion!==undefined && l.precioRenovacion!=='' && Number(l.precioRenovacion)!==Number(l.precioActual)) ? `<div style="color:var(--teal);">→ ${lnMoney(l.precioRenovacion)}</div>` : '';
     const dTxt = d===null ? '' : (d<0 ? `hace ${-d} días` : (d===0 ? 'hoy' : `en ${d} días`));
+    const factura = (l.servicio && (!u || sinAcentos(l.servicio).trim()!==sinAcentos(lnNombre(u)).trim())) ? `<div class="ln-sub">Factura: ${esc(l.servicio)}</div>` : '';
     return `
     <tr>
+      <td style="white-space:nowrap;"><span class="tag" style="${LN_ESTILO[a]||''}">${esc(a)}</span><div class="ln-sub">${lnFecha(l.fechaRenovacion)}${dTxt?' · '+dTxt:''}</div></td>
+      <td class="mono" style="white-space:nowrap;"><b>${esc(l.linea)}</b><div class="ln-sub">${esc(l.cuenta||'')}</div></td>
+      <td>${usuarioHtml}${factura}</td>
       <td><span class="tag">${esc(l.grupo||'—')}</span></td>
-      <td class="mono" style="white-space:nowrap;"><b>${esc(l.linea)}</b><div style="font-size:10px;color:var(--ink-soft);">${esc(l.cuenta||'')}</div></td>
-      <td style="font-size:12px;">${esc(l.servicio||'—')}</td>
-      <td>${usuarioHtml}</td>
-      <td style="font-size:11px;">${eqHtml}</td>
-      <td style="font-size:11px;">${l.celular==='NO' ? 'Sin equipo' : esc(l.modelo || (l.celular==='SI'?'Sí':'—'))}</td>
-      <td class="mono" style="font-size:11px;white-space:nowrap;">${lnMoney(l.precioActual)}${ren}</td>
-      <td class="mono" style="font-size:11px;white-space:nowrap;">${lnFecha(l.fechaRenovacion)}<div style="color:var(--ink-soft);">${dTxt}</div></td>
-      <td><span class="tag" style="${LN_ESTILO[a]||''}">${esc(a)}</span></td>
-      <td style="font-size:11px;">${esc(l.accion||'Renovar')}${l.comentarios?`<div style="color:var(--ink-soft);">${esc(l.comentarios)}</div>`:''}</td>
+      <td style="font-size:12px;">${eqHtml}</td>
+      <td style="font-size:12px;">${l.celular==='NO' ? 'Sin equipo' : esc(l.modelo || (l.celular==='SI'?'Sí':'—'))}</td>
+      <td style="white-space:nowrap;">${lnMoney(l.precioActual)}${ren}</td>
+      <td style="font-size:12px;">${esc(l.accion||'Renovar')}${l.comentarios?`<div class="ln-sub">${esc(l.comentarios)}</div>`:''}</td>
       <td class="row-actions">
         <button class="secondary" onclick="editLn('${esc(l.id)}')">Editar</button>
         <button class="danger" onclick="delLn('${esc(l.id)}')">Eliminar</button>
@@ -1259,7 +1290,7 @@ const fIn = (id, label, type='text', val='', extra='') => `<div class="field"><l
 const fSel = (id, label, opts, val='', vacio='') => `<div class="field"><label>${label}</label><select id="${id}">${opcionesLista(opts, val, vacio)}</select></div>`;
 const fRad = (name, opts, val='') => `<div class="checks">${opts.map(o=>`<label><input type="radio" name="${name}" value="${esc(o)}" ${o===val?'checked':''}> ${esc(o)}</label>`).join('')}</div>`;
 const fChk = (cls, opts, marcados=[]) => `<div class="checks">${opts.map(o=>`<label><input type="checkbox" class="${cls}" value="${esc(o)}" ${marcados.includes(o)?'checked':''}> ${esc(o)}</label>`).join('')}</div>`;
-const fLbl = t => `<label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin:4px 0;font-family:'SF Mono',monospace;">${t}</label>`;
+const fLbl = t => `<label style="display:block;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin:4px 0;font-family:var(--sans);font-weight:600;">${t}</label>`;
 const gRad = name => (document.querySelector(`input[name="${name}"]:checked`)||{}).value || '';
 const gChk = cls => [...document.querySelectorAll('.'+cls+':checked')].map(c=>c.value);
 const gV = id => (document.getElementById(id)?.value||'').trim();
