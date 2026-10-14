@@ -1155,46 +1155,7 @@ window.saveLu = async function(id, isEdit){
   const ok = await Storage.set('laptops_usadas', usadas);
   closeModal(); refreshLuUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Laptop agregada ✓');
 };
-window.asignarLu = function(id){
-  const x = usadas.find(y=>y.id===id); if(!x) return;
-  const deptos = [...new Set(equipo.map(e=>e.departamento).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  document.getElementById('modalBox').innerHTML = `
-    <h3>Asignar laptop</h3>
-    <p style="font-size:12px;margin:0 0 10px;"><b>${esc(x.equipo)}</b> · serie ${esc(x.serie||'sin serie')}. Pasará a <b>Equipos activos</b> y saldrá de Laptops disponibles.</p>
-    <div class="field"><label>Usuario asignado</label><input id="a_usuario" type="text" placeholder="Nombre y apellido"></div>
-    <div class="field"><label>Empresa</label><select id="a_empresa">${opcionesLista(EQ_EMPRESAS, x.empresa, 'Elige la empresa')}</select></div>
-    <div class="field"><label>Departamento</label><input id="a_departamento" type="text" list="dl_deptos_a"></div>
-    <div class="field"><label>Ubicación</label><input id="a_ubicacion" type="text" placeholder="Ej. Panamá, Arraiján, Sucursal VH"></div>
-    <datalist id="dl_deptos_a">${deptos.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
-    <div class="modal-actions">
-      <button class="secondary" onclick="closeModal()">Cancelar</button>
-      <button onclick="confirmarAsignarLu('${x.id}')">Asignar</button>
-    </div>`;
-  showModal();
-};
-window.confirmarAsignarLu = async function(id){
-  const x = usadas.find(y=>y.id===id); if(!x) return;
-  const v = k => document.getElementById('a_'+k).value.trim();
-  const usuario = v('usuario'), empresa = v('empresa');
-  if(!usuario){ alert('Escribe el usuario asignado.'); return; }
-  if(!empresa){ alert('Elige la empresa.'); return; }
-  if(x.serie && equipo.some(e=>(e.serie||'').trim().toUpperCase()===x.serie.trim().toUpperCase()) && !confirm(`La serie ${x.serie} ya existe en Equipos activos. ¿Asignar de todos modos?`)) return;
-  const hoy = new Date().toLocaleDateString('es-PA',{day:'2-digit',month:'short',year:'numeric'});
-  const nuevo = limpiarEquipo({
-    id: uid('eq'), usuario, empresa, departamento: v('departamento'), ubicacion: v('ubicacion'),
-    tipo:'Laptop', fabricante:x.fabricante, equipo:x.equipo, serie:x.serie, procesador:x.procesador, ram:x.ram, disco:x.disco,
-    estado:'Asignado', origen:'Activos', telefono:'', cuenta:'',
-    notas: `Asignada desde Laptops disponibles el ${hoy}` + (x.ultimoUsuario ? `; último usuario: ${x.ultimoUsuario}` : '')
-  });
-  const eqAntes = equipo, luAntes = usadas;
-  equipo = [...equipo, nuevo];
-  usadas = usadas.filter(y=>y.id!==id);
-  const ok1 = await Storage.set('equipos', equipo);
-  const ok2 = ok1 ? await Storage.set('laptops_usadas', usadas) : false;
-  if(!ok1){ equipo = eqAntes; usadas = luAntes; }
-  closeModal(); refreshEqUI(); refreshLuUI();
-  if(ok1 && ok2) toast(`Asignada a ${usuario} ✓`);
-};
+window.asignarLu = id => openMovModal('Entrada', { luId: id });
 window.delLu = async function(id){
   const x = usadas.find(y=>y.id===id); if(!x) return;
   if(!confirm(`¿Eliminar ${x.equipo} (${x.serie||'sin serie'}) de Laptops disponibles?`)) return;
@@ -1265,7 +1226,7 @@ function renderMovTable(){
       <td class="mono"><b>${esc(m.numero)}</b></td>
       <td class="mono">${esc(fechaCorta(m.fecha))}</td>
       <td><span class="tag ${m.tipo==='Entrada'?'':'rust'}">${esc(m.tipo)}</span></td>
-      <td style="font-size:11px;">${esc(m.motivo)}</td>
+      <td style="font-size:11px;">${esc(m.cambio ? 'Cambio de equipo' : m.motivo)}${m.pendienteFirma ? '<div><span class="tag rust">Por firmar</span></div>' : ''}</td>
       <td><b>${esc(m.colaborador)}</b><div style="font-size:10.5px;color:var(--ink-soft)">${esc([m.cargo,m.departamento].filter(Boolean).join(' · '))}</div></td>
       <td><span class="tag">${esc(m.empresa||'—')}</span></td>
       <td>${esc(m.laptop&&m.laptop.modelo||'—')}<div class="mono" style="font-size:10.5px;color:var(--ink-soft)">${esc(m.laptop&&m.laptop.serie||'')}</div></td>
@@ -1382,27 +1343,72 @@ function aplicarFichaSalida(p){
   marcarFaltantesSalida();
 }
 
-function openMovModal(tipo){
+/* --- Entrada / cambio de equipo: ficha del colaborador y equipo anterior --- */
+const esComputo = e => /laptop|pc|all-in-one|escritorio/i.test(e.tipo||'') || !e.tipo;
+function personalEntrada(){
+  const conEq = personalConEquipo();
+  const ya = new Set(conEq.filter(p=>p.usuarioId).map(p=>p.usuarioId));
+  const sinEq = usuarios.filter(u=>!ya.has(u.id) && lnNombre(u).trim()).map(u=>({ key:'u:'+u.id, usuarioId:u.id, usuario:u, nombre: lnNombre(u).replace(/\s+/g,' ').trim(), empresa:u.empresa||'', departamento:'', equipos:[], lineas:[] }));
+  const todos = [...conEq, ...sinEq];
+  todos.forEach(p=>{ if(!p.equipos.length && !p.lineas.length) p.etiqueta = `${p.nombre} — ${p.empresa||'sin empresa'} · sin equipo`; });
+  return todos.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+}
+function equiposActuales(nombre, usuarioId){
+  const n = normNom(nombre);
+  return equipo.filter(e=>esComputo(e) && ((usuarioId && e.usuarioId===usuarioId) || (n && normNom(e.usuario)===n)));
+}
+function pintarCambioEntrada(nombre, usuarioId){
+  const box = document.getElementById('m_ficha'); if(!box) return;
+  const p = window.__fichaEnt && normNom(window.__fichaEnt.nombre)===normNom(nombre) ? window.__fichaEnt : null;
+  const actuales = equiposActuales(nombre, usuarioId || (p&&p.usuarioId));
+  const u = p && p.usuario;
+  if(!actuales.length && !u){ box.innerHTML = ''; return; }
+  const eqTxt = e => `${esc([e.tipo, e.fabricante, e.equipo].filter(Boolean).join(' ') || 'Equipo')} · serie ${esc(e.serie||'—')}${e.placa?` · placa ${esc(e.placa)}`:''}`;
+  box.innerHTML = `<div class="ficha-sal">
+    ${p ? `<div><b>${esc(p.nombre)}</b> · ${esc(p.empresa||'')}${u&&u.correo?` · ${esc(u.correo)}`:''}</div>` : ''}
+    ${actuales.length ? `<div style="margin-top:4px;color:var(--rust);"><b>Cambio de equipo:</b> esta persona ya tiene equipo asignado. Lo marcado se retira de Equipos activos y pasa a Laptops libres como “Por revisar”.</div>
+      ${actuales.map(e=>`<label><input type="checkbox" class="m_ret" value="${esc(e.id)}" checked> ${eqTxt(e)}</label>`).join('')}` : '<div>No tiene equipo asignado: es una entrega nueva.</div>'}
+  </div>`;
+  if(actuales.length){ const r = document.querySelector('input[name="m_motivo"][value="Asignación o reemplazo de equipo"]'); if(r) r.checked = true; }
+}
+function aplicarFichaEntrada(p){
+  window.__fichaEnt = p;
+  const $ = id => document.getElementById(id);
+  const setSi = (id, v) => { const el = $(id); if(el && v && !el.value) el.value = v; };
+  $('m_colaborador').value = p.nombre;
+  setSi('m_departamento', p.departamento);
+  const emp = MOV_EMPRESAS.find(x=>sinAcentos(x)===sinAcentos(p.empresa)) || MOV_EMPRESAS.find(x=>p.empresa && (sinAcentos(p.empresa).includes(sinAcentos(x)) || sinAcentos(x).includes(sinAcentos(p.empresa))));
+  if(emp) $('m_empresa').innerHTML = opcionesLista(MOV_EMPRESAS, emp, 'Elige la empresa');
+  const u = p.usuario;
+  if(u){ setSi('m_cu_usr0', u.correo); if(u.dropbox && /@/.test(u.dropbox)) setSi('m_cu_usr2', u.dropbox); else if(u.dropbox && /s[ií]/i.test(u.dropbox)) setSi('m_cu_usr2', u.correo); }
+  const ln = p.lineas[0];
+  if(ln){ setSi('m_sim', ln.linea); if(String(ln.celular||'').toUpperCase()==='SI') setSi('m_cel_modelo', ln.modelo); }
+  pintarCambioEntrada(p.nombre, p.usuarioId);
+}
+
+function openMovModal(tipo, pre={}){
   const ent = tipo==='Entrada';
   const lista = ent
     ? usadas.map(x=>`<option value="lu:${x.id}">${esc(x.equipo)} · ${esc(x.serie||'sin serie')} · ${esc(x.empresa||'')} (${esc(x.condicion||'')})</option>`).join('') + '<option value="otro">Otro equipo (no está en Laptops disponibles)</option>'
     : [...equipo].sort((a,b)=>sinAcentos(a.usuario).localeCompare(sinAcentos(b.usuario),'es')).map(e=>`<option value="eq:${e.id}">${esc(e.usuario)} — ${esc(e.equipo||'')} · ${esc(e.serie||'')}</option>`).join('');
   const deptos = [...new Set(equipo.map(e=>e.departamento).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   const estados = ent ? ENT_ESTADO : SAL_ESTADO;
-  const personal = ent ? [] : personalConEquipo();
+  const personal = ent ? personalEntrada() : personalConEquipo();
+  const luPre = pre.luId ? usadas.find(x=>x.id===pre.luId) : null;
   const box = document.getElementById('modalBox'); box.classList.add('ancho');
   box.innerHTML = `
     <h3>${ent ? 'Acta de entrega de equipos y accesos tecnológicos' : 'Acta de devolución de equipos y cierre de accesos'}</h3>
+    ${luPre ? `<div class="eq-resumen" style="margin:0 0 8px;">Asignando <b>${esc(luPre.equipo)}</b> · serie ${esc(luPre.serie||'sin serie')} desde Laptops libres. Escribe el nombre: si ya tiene equipo, se registra como <b>cambio de equipo</b>. Las firmas son opcionales: el acta se sube a Dropbox para que el colaborador la firme.</div>` : ''}
     <div class="acta-sec">1 · Datos del colaborador</div>
     <div class="grid2">
-      ${ent ? fIn('m_colaborador','Nombre completo') : fIn('m_colaborador','Nombre completo (busca en el personal con equipo)','text','','list="dl_personal" autocomplete="off" placeholder="Escribe el nombre…"')}${fIn('m_cedula','Cédula / identificación')}
+      ${ent ? fIn('m_colaborador','Nombre completo (busca en Usuarios o escribe uno nuevo)','text','','list="dl_personal" autocomplete="off" placeholder="Escribe el nombre…"') : fIn('m_colaborador','Nombre completo (busca en el personal con equipo)','text','','list="dl_personal" autocomplete="off" placeholder="Escribe el nombre…"')}${fIn('m_cedula','Cédula / identificación')}
       ${fIn('m_cargo','Cargo')}<div class="field"><label>Departamento</label><input id="m_departamento" type="text" list="dl_deptos_m"></div>
       ${fSel('m_empresa','Empresa',MOV_EMPRESAS,'','Elige la empresa')}${fIn('m_jefe','Jefe inmediato')}
       ${ent ? fIn('m_ingreso','Fecha de ingreso (día 1)','date') + fIn('m_fecha','Fecha de entrega','date',hoyISO()) + fIn('m_rrhh','Solicitud de RRHH recibida','date')
             : fIn('m_ultimo','Último día laboral','date') + fIn('m_fecha','Fecha de devolución','date',hoyISO()) + fIn('m_aviso','Aviso de RRHH a IT','datetime-local') + fIn('m_cierre','Cierre de IT','datetime-local')}
     </div>
     <datalist id="dl_deptos_m">${deptos.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
-    ${ent ? '' : `<datalist id="dl_personal">${personal.map(p=>`<option value="${esc(p.etiqueta)}">`).join('')}</datalist><div id="m_ficha"></div>`}
+    <datalist id="dl_personal">${personal.map(p=>`<option value="${esc(p.etiqueta)}">`).join('')}</datalist><div id="m_ficha"></div>
     ${ent ? fLbl('Motivo') + fRad('m_motivo', ENT_MOTIVOS, ENT_MOTIVOS[0]) + '<div class="eq-resumen" style="margin:0 0 8px;">Meta: todo listo antes del día 1</div>'
           : fLbl('Tipo de salida') + fRad('m_motivo', SAL_TIPOS, SAL_TIPOS[0]) + '<div class="eq-resumen" style="margin:0 0 8px;">Meta: cierre en menos de 24 h</div>'}
 
@@ -1449,7 +1455,17 @@ function openMovModal(tipo){
     </div>`;
   showModal();
   prepararFirma('firmaCol'); prepararFirma('firmaIT');
-  window.__fichaSal = null;
+  window.__fichaSal = null; window.__fichaEnt = null;
+  if(ent){
+    const inp = document.getElementById('m_colaborador');
+    const buscar = () => {
+      const v = sinAcentos(inp.value).trim(); if(!v){ pintarCambioEntrada('', ''); return; }
+      const p = personal.find(x=>sinAcentos(x.etiqueta)===v) || (()=>{ const c = personal.filter(x=>sinAcentos(x.nombre)===v); return c.length===1 ? c[0] : null; })();
+      if(p && p!==window.__fichaEnt) aplicarFichaEntrada(p);
+      else if(!p){ window.__fichaEnt = null; pintarCambioEntrada(inp.value, ''); }
+    };
+    inp.addEventListener('change', buscar); inp.addEventListener('input', buscar);
+  }
   if(!ent){
     const inp = document.getElementById('m_colaborador');
     const buscar = () => {
@@ -1471,6 +1487,10 @@ function openMovModal(tipo){
     if(v.startsWith('lu:')){ const x = usadas.find(y=>y.id===v.slice(3)); if(!x) return;
       setEmp(x.empresa); document.getElementById('m_lap_estado').value = 'Usado en óptimas condiciones'; }
   };
+  if(luPre){
+    const sel = document.getElementById('m_equipo'); sel.value = 'lu:'+luPre.id; sel.onchange({target: sel});
+    const r = document.querySelector('input[name="m_motivo"][value="Asignación o reemplazo de equipo"]'); if(r) r.checked = true;
+  }
 }
 
 /* --- PDF con el diseño de los modelos de Grupo Semah --- */
@@ -1484,8 +1504,8 @@ function generarActaPDF(m){
   // encabezado
   const logo = document.querySelector('img[alt="Semah Group"]');
   if(logo && logo.src){ try{ doc.addImage(logo.src, 'PNG', M, 9, 46, 8); }catch(_){} } else { txt('semahgroup', M, 15, {b:1, s:14}); }
-  txt(ent?'Acta de entrega de equipos y accesos tecnológicos':'Acta de devolución de equipos y cierre de accesos', R, 13, {b:1, s:12.5, al:'right'});
-  txt(ent?'Asignación a colaborador, Departamento de IT':'Salida de personal, Departamento de IT', R, 17.5, {s:8.5, c:MUT, al:'right'});
+  txt(ent?(m.cambio?'Acta de cambio de equipo':'Acta de entrega de equipos y accesos tecnológicos'):'Acta de devolución de equipos y cierre de accesos', R, 13, {b:1, s:12.5, al:'right'});
+  txt(ent?(m.cambio?'Reemplazo de equipo asignado, Departamento de IT':'Asignación a colaborador, Departamento de IT'):'Salida de personal, Departamento de IT', R, 17.5, {s:8.5, c:MUT, al:'right'});
   txt(m.numero, R, 21.5, {b:1, s:8, c:ACC, al:'right'});
   doc.setDrawColor(...ACC); doc.setLineWidth(0.6); doc.line(M, 23.5, R, 23.5); doc.setLineWidth(0.2);
   y = 28.5;
@@ -1573,7 +1593,7 @@ function generarActaPDF(m){
   txt('Grupo Semah, Departamento de IT', R, yf+3.8, {s:7, c:MUT, al:'right'});
   return doc;
 }
-const nombreActa = m => `${m.numero} ${m.colaborador}`.replace(/[\\/:*?"<>|]/g,'').trim();
+const nombreActa = m => `${m.numero} ${m.colaborador}${m.cambio?' (cambio de equipo)':''}${m.pendienteFirma?' - por firmar':''}`.replace(/[\\/:*?"<>|]/g,'').trim();
 
 async function subirActa(m){
   try{
@@ -1599,13 +1619,24 @@ window.guardarMov = async function(tipo){
   if(!gV('m_colaborador')){ alert('Escribe el nombre del colaborador.'); return; }
   if(!gV('m_empresa')){ alert('Elige la empresa.'); return; }
   if(!gV('m_it')){ alert('Escribe el nombre de la persona de IT.'); return; }
-  if(document.getElementById('firmaCol').dataset.vacia==='1' || document.getElementById('firmaIT').dataset.vacia==='1'){ alert('Faltan las firmas del colaborador y de IT.'); return; }
+  const sinFirmaCol = document.getElementById('firmaCol').dataset.vacia==='1', sinFirmaIT = document.getElementById('firmaIT').dataset.vacia==='1';
+  if(!ent && (sinFirmaCol || sinFirmaIT)){ alert('Faltan las firmas del colaborador y de IT.'); return; }
+  if(ent && (sinFirmaCol || sinFirmaIT) && !confirm('El acta se generará sin ' + (sinFirmaCol && sinFirmaIT ? 'firmas' : sinFirmaCol ? 'la firma del colaborador' : 'la firma de IT') + ' y se subirá a Dropbox para firmarla. ¿Continuar?')) return;
   let origen = null, lap = {};
   if(sel.startsWith('lu:')){ origen = usadas.find(x=>x.id===sel.slice(3)); lap = {tipo:'Laptop', marca:origen.fabricante, modelo:origen.equipo, serie:origen.serie, procesador:origen.procesador, ram:origen.ram, disco:origen.disco}; }
   else if(sel.startsWith('eq:')){ origen = equipo.find(x=>x.id===sel.slice(3)); lap = {tipo:origen.tipo, marca:origen.fabricante, modelo:origen.equipo, serie:origen.serie, procesador:origen.procesador, ram:origen.ram, disco:origen.disco}; }
   else if(sel==='otro'){ if(!gV('m_o_modelo')){ alert('Escribe el modelo del equipo.'); return; } lap = {tipo:gV('m_o_tipo'), marca:gV('m_o_marca'), modelo:gV('m_o_modelo'), serie:gV('m_o_serie')}; }
   lap.estado = sel==='ninguno' ? '' : gV('m_lap_estado');
   if(ent && lap.serie && equipo.some(e=>(e.serie||'').toUpperCase()===lap.serie.toUpperCase()) && !confirm(`La serie ${lap.serie} ya está en Equipos activos. ¿Continuar?`)) return;
+  const fichaEnt = ent && window.__fichaEnt && normNom(window.__fichaEnt.nombre)===normNom(gV('m_colaborador')) ? window.__fichaEnt : null;
+  let retirados = [];
+  if(ent){
+    const marcados = new Set(gChk('m_ret'));
+    const actuales = equiposActuales(gV('m_colaborador'), fichaEnt && fichaEnt.usuarioId);
+    retirados = actuales.filter(e=>marcados.has(e.id));
+    const sinMarcar = actuales.filter(e=>!marcados.has(e.id) && !document.querySelector(`.m_ret[value="${e.id}"]`));
+    if(sinMarcar.length && confirm(`${gV('m_colaborador')} ya tiene asignado: ${sinMarcar.map(e=>`${e.equipo||e.tipo} (${e.serie||'sin serie'})`).join(', ')}.\n\n¿Es un cambio de equipo? Aceptar = retirar el anterior y pasarlo a Laptops libres.`)) retirados = [...retirados, ...sinMarcar];
+  }
   const fecha = gV('m_fecha') || hoyISO();
   const cuentas = ent
     ? [...ENT_CUENTAS,'','',''].map((s,i)=>({sistema: s||gV('m_cu_sis'+i), usuario: gV('m_cu_usr'+i), mfa: gV('m_cu_mfa'+i), fecha: gV('m_cu_f'+i)}))
@@ -1621,10 +1652,18 @@ window.guardarMov = async function(tipo){
     cuentaTipo: gRad('m_cuenta'), heredadaDe: gV('m_heredada'), mfaEn: gRad('m_mfa_en'), bitwarden: gChk('m_bitwarden').length>0, seguridad: gChk('m_seg'),
     destino: gV('m_destino'), destinoFecha: gV('m_destino_f'), registro: gChk('m_reg'), estadoGeneral: gRad('m_estado_gral'),
     observaciones: limpiarTexto(gV('m_obs')), itNombre: gV('m_it'),
-    firmaCol: document.getElementById('firmaCol').toDataURL('image/png'),
-    firmaIT: document.getElementById('firmaIT').toDataURL('image/png'),
+    firmaCol: sinFirmaCol ? '' : document.getElementById('firmaCol').toDataURL('image/png'),
+    firmaIT: sinFirmaIT ? '' : document.getElementById('firmaIT').toDataURL('image/png'),
+    pendienteFirma: sinFirmaCol || sinFirmaIT,
     estadoDropbox: 'Pendiente', dropboxPath: '', registrado: new Date().toISOString()
   };
+  if(ent && fichaEnt) m.usuarioId = fichaEnt.usuarioId || '';
+  if(retirados.length){
+    m.cambio = true; m.motivo = 'Asignación o reemplazo de equipo';
+    m.equiposRetirados = retirados.map(e=>({id:e.id, tipo:e.tipo, marca:e.fabricante, modelo:e.equipo, serie:e.serie, placa:e.placa||''}));
+    const nota = 'Cambio de equipo. Se retira: ' + retirados.map(e=>[e.tipo, e.fabricante, e.equipo].filter(Boolean).join(' ') + ' serie ' + (e.serie||'s/n') + (e.placa?' placa '+e.placa:'')).join('; ') + '.';
+    m.observaciones = m.observaciones ? nota + ' ' + m.observaciones : nota;
+  }
   const fichaSal = !ent && window.__fichaSal && normNom(window.__fichaSal.nombre)===normNom(m.colaborador) ? window.__fichaSal : null;
   const extrasDev = fichaSal ? gChk('m_dev').map(id=>equipo.find(x=>x.id===id)).filter(x=>x && x!==origen) : [];
   if(fichaSal){
@@ -1635,10 +1674,20 @@ window.guardarMov = async function(tipo){
   const btn = document.getElementById('btnGuardarActa'); btn.disabled = true; btn.textContent = 'Guardando…';
   const eqAntes = equipo, luAntes = usadas, mvAntes = movs;
   const empNexo = m.empresa;
+  if(ent && retirados.length){
+    equipo = equipo.filter(x=>!retirados.includes(x));
+    retirados.forEach(e=>{
+      usadas = [...usadas, { id: uid('lu'), empresa: e.empresa||empNexo, fabricante: e.fabricante||'', equipo: e.equipo||'', serie: e.serie||'', procesador: e.procesador||'', ram: e.ram||'', disco: e.disco||'',
+        ultimoUsuario: m.colaborador, procedencia: `Cambio de equipo · acta ${m.numero}`, condicion: 'Por revisar', notas: (/laptop/i.test(e.tipo||'') ? '' : `Tipo: ${e.tipo}. `) + (e.placa ? `Placa ${e.placa}` : '') }];
+    });
+  }
   if(ent && lap.modelo){
-    equipo = [...equipo, limpiarEquipo({ id: uid('eq'), usuario: m.colaborador, empresa: empNexo, departamento: m.departamento, ubicacion: '',
+    const ant = retirados[0] || {};
+    const empInv = EQ_EMPRESAS.find(x=>sinAcentos(x)===sinAcentos(empNexo)) || ant.empresa || empNexo;
+    equipo = [...equipo, limpiarEquipo({ id: uid('eq'), usuario: m.colaborador, usuarioId: m.usuarioId || ant.usuarioId || '', empresa: empInv, departamento: m.departamento || ant.departamento || '', ubicacion: ant.ubicacion || '',
       tipo: lap.tipo||'Laptop', fabricante: lap.marca||'', equipo: lap.modelo, serie: lap.serie||'', procesador: lap.procesador||'', ram: lap.ram||'', disco: lap.disco||'',
-      estado:'Asignado', origen:'Activos', telefono:'', cuenta:'', notas:`Entregado con acta ${m.numero}` })];
+      estado:'Asignado', origen:'Activos', telefono: ant.telefono||'', cuenta: ant.cuenta||'', licenciaGmail: ant.licenciaGmail||'', dropbox: ant.dropbox||'',
+      notas: retirados.length ? `Cambio de equipo con acta ${m.numero}; reemplaza ${ant.equipo||''} serie ${ant.serie||'s/n'}` : `Entregado con acta ${m.numero}` })];
     if(origen && sel.startsWith('lu:')) usadas = usadas.filter(x=>x.id!==origen.id);
   }
   if(!ent && origen && sel.startsWith('eq:')){
@@ -1664,7 +1713,7 @@ window.guardarMov = async function(tipo){
   if(path){ movs = movs.map(x=>x.id===m.id?{...x, estadoDropbox:'Subido', dropboxPath:path}:x); await Storage.set('movimientos', movs); }
   else { generarActaPDF(m).save(nombreActa(m)+'.pdf'); }
   closeModal(); refreshEqUI(); refreshLuUI(); refreshMovUI();
-  toast(path ? `Acta ${m.numero} guardada en Dropbox ✓` : `Acta ${m.numero} registrada. Se descargó el PDF: súbelo a Acta Doc / ${MOV_CARPETA[tipo]}.`);
+  toast((path ? `Acta ${m.numero} guardada en Dropbox ✓` : `Acta ${m.numero} registrada. Se descargó el PDF: súbelo a Acta Doc / ${MOV_CARPETA[tipo]}.`) + (m.pendienteFirma ? ' Pendiente de firma.' : '') + (retirados.length ? ` Equipo anterior pasó a Laptops libres.` : ''));
 };
 document.getElementById('btnMovEntrada').onclick = ()=>openMovModal('Entrada');
 document.getElementById('btnMovSalida').onclick = ()=>openMovModal('Salida');
