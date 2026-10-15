@@ -286,7 +286,7 @@
       <div class="stats" id="movStats"></div>
       <div class="eq-resumen">Cada entrada o salida genera el acta en PDF con firmas y la guarda en Dropbox: <b>Acta Doc / Entradas de personal</b> o <b>Acta Doc / Salidas de personal</b>. El equipo cambia de lista automáticamente.</div>
       <div class="controls">
-        <select id="movTipoFilter" aria-label="Tipo"><option value="">Entradas y salidas</option><option value="Entrada">Solo entradas</option><option value="Salida">Solo salidas</option></select>
+        <select id="movTipoFilter" aria-label="Tipo"><option value="">Todas las actas</option><option value="Entrada">Entradas de personal (ENT)</option><option value="Salida">Salidas de personal (SAL)</option><option value="Cambio">Cambio de equipos (CAM)</option><option value="Activos">Entrega de activos (ACT)</option></select>
         <input type="text" id="movSearch" placeholder="Buscar por colaborador, acta, modelo o serie…">
         <button id="btnMovEntrada">+ Nueva entrada</button>
         <button id="btnMovSalida" class="secondary">+ Nueva salida</button>
@@ -1169,9 +1169,14 @@ document.getElementById('luSearch').oninput = renderLuTable;
 
 /* ---------- ENTRADAS Y SALIDAS (ACTAS) ---------- */
 let movs = [];
-const MOV_CARPETA = { Entrada:'Entradas de personal', Salida:'Salidas de personal' };
+const MOV_CARPETA = { Entrada:'Entradas de personal', Salida:'Salidas de personal', Cambio:'Cambio de Equipos', Activos:'Entrega de Activos' };
+const MOV_PREFIJO = { Entrada:'ENT', Salida:'SAL', Cambio:'CAM', Activos:'ACT' };
+const MOV_CLASE_TXT = { Entrada:'Entrada de personal', Salida:'Salida de personal', Cambio:'Cambio de equipo', Activos:'Entrega de activos' };
+// Clase del acta: define numeración y carpeta de Dropbox
+const claseActa = m => m.clase || (m.tipo==='Salida' ? 'Salida' : m.cambio ? 'Cambio' : m.motivo==='Ingreso de personal' ? 'Entrada' : 'Activos');
 const MOV_EMPRESAS = ['Almacenajes','Colinas','Haus','SG. Investment','Semah Properties','Coronado Mall','T. Storage'];
-const ENT_MOTIVOS = ['Ingreso de personal','Asignación o reemplazo de equipo'];
+const ENT_MOTIVOS = ['Ingreso de personal','Cambio o reemplazo de equipo','Entrega de activos'];
+const motivoTxt = m => m.motivo==='Asignación o reemplazo de equipo' ? (m.cambio ? 'Cambio o reemplazo de equipo' : 'Entrega de activos') : m.motivo;
 const SAL_TIPOS = ['Renuncia','Despido (bloqueo inmediato)','Fin de contrato','Traslado entre empresas'];
 const ENT_ESTADO = ['Nuevo','Usado en óptimas condiciones','N/A'];
 const SAL_ESTADO = ['Excelente','Bueno / desgaste normal','Con daños','No devuelto','N/A'];
@@ -1200,8 +1205,8 @@ const TERM_SAL = [
 const hoyISO = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
 const fechaCorta = iso => { if(!iso) return ''; const [a,m,d] = iso.slice(0,10).split('-'); return `${d}/${m}/${a}` + (iso.length>10 ? ' ' + iso.slice(11,16) : ''); };
 
-function siguienteActa(tipo, fecha){
-  const pre = (tipo==='Entrada'?'ENT':'SAL') + '-' + (fecha||hoyISO()).slice(0,4) + '-';
+function siguienteActa(clase, fecha){
+  const pre = (MOV_PREFIJO[clase] || 'ENT') + '-' + (fecha||hoyISO()).slice(0,4) + '-';
   const n = movs.filter(m=>(m.numero||'').startsWith(pre)).map(m=>parseInt(m.numero.slice(pre.length),10)||0);
   return pre + String((n.length?Math.max(...n):0)+1).padStart(3,'0');
 }
@@ -1209,15 +1214,14 @@ function renderMovStats(){
   const mes = hoyISO().slice(0,7);
   document.getElementById('movStats').innerHTML = `
     <div class="stat"><div class="num">${movs.length}</div><div class="lbl">Actas registradas</div></div>
-    <div class="stat"><div class="num">${movs.filter(m=>m.tipo==='Entrada').length}</div><div class="lbl">Entradas de personal</div></div>
-    <div class="stat"><div class="num">${movs.filter(m=>m.tipo==='Salida').length}</div><div class="lbl">Salidas de personal</div></div>
+    ${['Entrada','Salida','Cambio','Activos'].map(c=>`<div class="stat"><div class="num">${movs.filter(m=>claseActa(m)===c).length}</div><div class="lbl">${MOV_CARPETA[c]}</div></div>`).join('')}
     <div class="stat"><div class="num">${movs.filter(m=>(m.fecha||'').startsWith(mes)).length}</div><div class="lbl">Este mes</div></div>
     <div class="stat"><div class="num">${movs.filter(m=>m.estadoDropbox!=='Subido').length}</div><div class="lbl">Pendientes de subir a Dropbox</div></div>`;
 }
 function renderMovTable(){
   const tF = document.getElementById('movTipoFilter').value;
   const q = sinAcentos(document.getElementById('movSearch').value.trim());
-  const rows = movs.filter(m=>(!tF||m.tipo===tF) && (!q || [m.numero,m.colaborador,m.laptop&&m.laptop.modelo,m.laptop&&m.laptop.serie,m.empresa].some(v=>sinAcentos(v).includes(q))))
+  const rows = movs.filter(m=>(!tF||claseActa(m)===tF) && (!q || [m.numero,m.colaborador,m.laptop&&m.laptop.modelo,m.laptop&&m.laptop.serie,m.empresa].some(v=>sinAcentos(v).includes(q))))
     .sort((a,b)=> (b.fecha||'').localeCompare(a.fecha||'') || (b.numero||'').localeCompare(a.numero||''));
   const tb = document.getElementById('movTbody');
   if(!rows.length){ tb.innerHTML = `<tr><td colspan="9" class="empty">Todavía no hay actas. Usa “+ Nueva entrada” o “+ Nueva salida”.</td></tr>`; return; }
@@ -1225,8 +1229,8 @@ function renderMovTable(){
     <tr>
       <td class="mono"><b>${esc(m.numero)}</b></td>
       <td class="mono">${esc(fechaCorta(m.fecha))}</td>
-      <td><span class="tag ${m.tipo==='Entrada'?'':'rust'}">${esc(m.tipo)}</span></td>
-      <td style="font-size:11px;">${esc(m.cambio ? 'Cambio de equipo' : m.motivo)}${m.pendienteFirma ? '<div><span class="tag rust">Por firmar</span></div>' : ''}</td>
+      <td><span class="tag ${m.tipo==='Entrada'?'':'rust'}">${esc(MOV_CLASE_TXT[claseActa(m)])}</span></td>
+      <td style="font-size:11px;">${esc(motivoTxt(m))}${m.pendienteFirma ? '<div><span class="tag rust">Por firmar</span></div>' : ''}</td>
       <td><b>${esc(m.colaborador)}</b><div style="font-size:10.5px;color:var(--ink-soft)">${esc([m.cargo,m.departamento].filter(Boolean).join(' · '))}</div></td>
       <td><span class="tag">${esc(m.empresa||'—')}</span></td>
       <td>${esc(m.laptop&&m.laptop.modelo||'—')}<div class="mono" style="font-size:10.5px;color:var(--ink-soft)">${esc(m.laptop&&m.laptop.serie||'')}</div></td>
@@ -1368,7 +1372,8 @@ function pintarCambioEntrada(nombre, usuarioId){
     ${actuales.length ? `<div style="margin-top:4px;color:var(--rust);"><b>Cambio de equipo:</b> esta persona ya tiene equipo asignado. Lo marcado se retira de Equipos activos y pasa a Laptops libres como “Por revisar”.</div>
       ${actuales.map(e=>`<label><input type="checkbox" class="m_ret" value="${esc(e.id)}" checked> ${eqTxt(e)}</label>`).join('')}` : '<div>No tiene equipo asignado: es una entrega nueva.</div>'}
   </div>`;
-  if(actuales.length){ const r = document.querySelector('input[name="m_motivo"][value="Asignación o reemplazo de equipo"]'); if(r) r.checked = true; }
+  const rm = document.querySelector(`input[name="m_motivo"][value="${actuales.length ? 'Cambio o reemplazo de equipo' : 'Entrega de activos'}"]`);
+  if(rm && (actuales.length || document.getElementById('m_equipo')?.value.startsWith('lu:'))) rm.checked = true;
 }
 function aplicarFichaEntrada(p){
   window.__fichaEnt = p;
@@ -1489,7 +1494,7 @@ function openMovModal(tipo, pre={}){
   };
   if(luPre){
     const sel = document.getElementById('m_equipo'); sel.value = 'lu:'+luPre.id; sel.onchange({target: sel});
-    const r = document.querySelector('input[name="m_motivo"][value="Asignación o reemplazo de equipo"]'); if(r) r.checked = true;
+    const r = document.querySelector('input[name="m_motivo"][value="Entrega de activos"]'); if(r) r.checked = true;
   }
 }
 
@@ -1504,8 +1509,9 @@ function generarActaPDF(m){
   // encabezado
   const logo = document.querySelector('img[alt="Semah Group"]');
   if(logo && logo.src){ try{ doc.addImage(logo.src, 'PNG', M, 9, 46, 8); }catch(_){} } else { txt('semahgroup', M, 15, {b:1, s:14}); }
-  txt(ent?(m.cambio?'Acta de cambio de equipo':'Acta de entrega de equipos y accesos tecnológicos'):'Acta de devolución de equipos y cierre de accesos', R, 13, {b:1, s:12.5, al:'right'});
-  txt(ent?(m.cambio?'Reemplazo de equipo asignado, Departamento de IT':'Asignación a colaborador, Departamento de IT'):'Salida de personal, Departamento de IT', R, 17.5, {s:8.5, c:MUT, al:'right'});
+  const cl = claseActa(m);
+  txt({Entrada:'Acta de entrega de equipos y accesos tecnológicos', Cambio:'Acta de cambio de equipo', Activos:'Acta de entrega de activos', Salida:'Acta de devolución de equipos y cierre de accesos'}[cl], R, 13, {b:1, s:12.5, al:'right'});
+  txt({Entrada:'Ingreso de personal, Departamento de IT', Cambio:'Reemplazo de equipo asignado, Departamento de IT', Activos:'Asignación de activos a colaborador, Departamento de IT', Salida:'Salida de personal, Departamento de IT'}[cl], R, 17.5, {s:8.5, c:MUT, al:'right'});
   txt(m.numero, R, 21.5, {b:1, s:8, c:ACC, al:'right'});
   doc.setDrawColor(...ACC); doc.setLineWidth(0.6); doc.line(M, 23.5, R, 23.5); doc.setLineWidth(0.2);
   y = 28.5;
@@ -1536,7 +1542,7 @@ function generarActaPDF(m){
   fila2('Empresa:', m.empresa, 'Jefe inmediato:', m.jefe);
   if(ent){
     fila2('Fecha de ingreso (día 1):', fechaCorta(m.fechaIngreso), 'Fecha de entrega:', fechaCorta(m.fecha));
-    fila2('Solicitud de RRHH recibida:', fechaCorta(m.solicitudRRHH), 'Motivo:', m.motivo);
+    fila2('Solicitud de RRHH recibida:', fechaCorta(m.solicitudRRHH), 'Motivo:', motivoTxt(m));
   } else {
     fila2('Último día laboral:', fechaCorta(m.ultimoDia), 'Fecha de devolución:', fechaCorta(m.fecha));
     fila2('Aviso de RRHH a IT:', fechaCorta(m.avisoRRHH), 'Cierre de IT:', fechaCorta(m.cierreIT));
@@ -1598,7 +1604,7 @@ const nombreActa = m => `${m.numero} ${m.colaborador}${m.cambio?' (cambio de equ
 async function subirActa(m){
   try{
     const b64 = generarActaPDF(m).output('datauristring').split(',')[1];
-    const { data, error } = await window.__sb.functions.invoke('subir-acta', { body: { carpeta: MOV_CARPETA[m.tipo], nombre: nombreActa(m), pdfBase64: b64 } });
+    const { data, error } = await window.__sb.functions.invoke('subir-acta', { body: { carpeta: MOV_CARPETA[claseActa(m)], nombre: nombreActa(m), pdfBase64: b64 } });
     if(error || !data || !data.ok) throw (error || new Error((data&&data.error)||'Error'));
     return data.path;
   }catch(e){ console.warn('Subida a Dropbox pendiente:', e); return null; }
@@ -1640,7 +1646,7 @@ window.guardarMov = async function(tipo){
     ? [...ENT_CUENTAS,'','',''].map((s,i)=>({sistema: s||gV('m_cu_sis'+i), usuario: gV('m_cu_usr'+i), mfa: gV('m_cu_mfa'+i), fecha: gV('m_cu_f'+i)}))
     : [...SAL_ACCESOS.map(a=>a[0]),'','',''].map((s,i)=>({sistema: s||gV('m_ac_sis'+i), accion: gV('m_ac_acc'+i), asignado: gV('m_ac_asig'+i), fecha: gV('m_ac_f'+i)}));
   const m = {
-    id: uid('mv'), numero: siguienteActa(tipo, fecha), tipo, motivo: gRad('m_motivo'), fecha,
+    id: uid('mv'), numero: '', tipo, motivo: gRad('m_motivo'), fecha,
     colaborador: gV('m_colaborador'), cedula: gV('m_cedula'), cargo: gV('m_cargo'), departamento: gV('m_departamento'), empresa: gV('m_empresa'), jefe: gV('m_jefe'),
     fechaIngreso: gV('m_ingreso'), solicitudRRHH: gV('m_rrhh'), ultimoDia: gV('m_ultimo'), avisoRRHH: gV('m_aviso'), cierreIT: gV('m_cierre'),
     laptop: lap, celular: {modelo: gV('m_cel_modelo'), imei: gV('m_cel_imei'), estado: gV('m_cel_estado')},
@@ -1657,11 +1663,14 @@ window.guardarMov = async function(tipo){
   };
   if(ent && fichaEnt) m.usuarioId = fichaEnt.usuarioId || '';
   if(retirados.length){
-    m.cambio = true; m.motivo = 'Asignación o reemplazo de equipo';
+    m.cambio = true; m.motivo = 'Cambio o reemplazo de equipo';
     m.equiposRetirados = retirados.map(e=>({id:e.id, tipo:e.tipo, marca:e.fabricante, modelo:e.equipo, serie:e.serie, placa:e.placa||''}));
     const nota = 'Cambio de equipo. Se retira: ' + retirados.map(e=>[e.tipo, e.fabricante, e.equipo].filter(Boolean).join(' ') + ' serie ' + (e.serie||'s/n') + (e.placa?' placa '+e.placa:'')).join('; ') + '.';
     m.observaciones = m.observaciones ? nota + ' ' + m.observaciones : nota;
   }
+  if(ent && m.motivo==='Cambio o reemplazo de equipo') m.cambio = true;
+  m.clase = !ent ? 'Salida' : m.cambio ? 'Cambio' : m.motivo==='Ingreso de personal' ? 'Entrada' : 'Activos';
+  m.numero = siguienteActa(m.clase, fecha);
   const fichaSal = !ent && window.__fichaSal && normNom(window.__fichaSal.nombre)===normNom(m.colaborador) ? window.__fichaSal : null;
   const extrasDev = fichaSal ? gChk('m_dev').map(id=>equipo.find(x=>x.id===id)).filter(x=>x && x!==origen) : [];
   if(fichaSal){
@@ -1711,7 +1720,7 @@ window.guardarMov = async function(tipo){
   if(path){ movs = movs.map(x=>x.id===m.id?{...x, estadoDropbox:'Subido', dropboxPath:path}:x); await Storage.set('movimientos', movs); }
   else { generarActaPDF(m).save(nombreActa(m)+'.pdf'); }
   closeModal(); refreshEqUI(); refreshLuUI(); refreshMovUI();
-  toast((path ? `Acta ${m.numero} guardada en Dropbox ✓` : `Acta ${m.numero} registrada. Se descargó el PDF: súbelo a Acta Doc / ${MOV_CARPETA[tipo]}.`) + (m.pendienteFirma ? ' Pendiente de firma.' : '') + (retirados.length ? ` Equipo anterior pasó a Laptops libres.` : ''));
+  toast((path ? `Acta ${m.numero} guardada en Dropbox ✓` : `Acta ${m.numero} registrada. Se descargó el PDF: súbelo a Acta Doc / ${MOV_CARPETA[m.clase]}.`) + (m.pendienteFirma ? ' Pendiente de firma.' : '') + (retirados.length ? ` Equipo anterior pasó a Laptops libres.` : ''));
 };
 document.getElementById('btnMovEntrada').onclick = ()=>openMovModal('Entrada');
 document.getElementById('btnMovSalida').onclick = ()=>openMovModal('Salida');
