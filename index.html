@@ -349,7 +349,7 @@
       <div class="controls">
         <select id="lnGrupoFilter" aria-label="Grupo"><option value="">Todos los grupos</option></select>
         <select id="lnAlertaFilter" aria-label="Alerta"><option value="">Todas las alertas</option></select>
-        <select id="lnMapeoFilter" aria-label="Enlace con usuario"><option value="">Con y sin usuario</option><option value="pend">Por revisar (sin usuario o nombre distinto)</option><option value="ok">Enlazadas a un usuario</option></select>
+        <select id="lnMapeoFilter" aria-label="Enlace con usuario"><option value="">Con y sin usuario</option><option value="pend">Por revisar (sin usuario o nombre distinto)</option><option value="ok">Enlazadas a un usuario</option><option value="libre">Libres para asignar</option></select>
         <input type="text" id="lnSearch" placeholder="Buscar por número, persona, equipo o modelo…">
         <button id="btnAddLn">+ Nueva línea</button>
       </div>
@@ -876,7 +876,38 @@ const lnFecha = s => s ? String(s).slice(0,10).split('-').reverse().join('/') : 
 const lnMoney = n => (n===undefined || n===null || n==='') ? '—' : '$' + Number(n).toFixed(2);
 const lnNombre = u => u ? ((u.nombre||'') + ' ' + (u.apellido||'')).trim() : '';
 const lnUsuario = l => l.usuarioId ? usuarios.find(u=>u.id===l.usuarioId) : null;
-const lnPendiente = l => !lnUsuario(l) || l.mapeo==='Aproximado' || l.mapeo==='Ambiguo';
+const lnLibre = l => !!l.libre && !l.usuarioId;
+const lnPendiente = l => !lnLibre(l) && (!lnUsuario(l) || l.mapeo==='Aproximado' || l.mapeo==='Ambiguo');
+// Líneas que se pueden dar a otra persona: libres, sin usuario, o de alguien que ya salió
+function lnSalidos(){
+  const ids = new Set(), noms = new Set();
+  movs.filter(m=>m.tipo==='Salida').forEach(m=>{ if(m.usuarioId) ids.add(m.usuarioId); noms.add(normNom(m.colaborador)); });
+  return { ids, noms };
+}
+function lnReasignables(){
+  const sal = lnSalidos();
+  return lineas.map(l=>{
+    const u = lnUsuario(l);
+    let motivo = '';
+    if(lnLibre(l)) motivo = 'Libre' + (l.anteriorUsuario ? ` · antes: ${l.anteriorUsuario}` : '');
+    else if(u && (sal.ids.has(u.id) || sal.noms.has(normNom(lnNombre(u))))) motivo = `De ${lnNombre(u)} (ya salió)`;
+    else if(!u && l.usuarioId) motivo = 'Usuario ya no existe';
+    else if(!u && !l.usuarioId && (l.accion||'Renovar')!=='Cancelar') motivo = 'Sin usuario' + (l.servicio ? ` · factura: ${l.servicio}` : '');
+    return motivo ? { l, motivo } : null;
+  }).filter(Boolean).sort((a,b)=> (lnLibre(b.l)-lnLibre(a.l)) || String(a.l.grupo).localeCompare(String(b.l.grupo),'es'));
+}
+// Deja una línea libre, guardando quién la tenía
+function lnLiberar(l, quien, acta){
+  const {usuarioNombre, usuarioEmpresa, equiposAsignados, ...r} = l;
+  return { ...r, usuarioId:'', mapeo:'Libre', libre:true, anteriorUsuario: quien || lnNombre(lnUsuario(l)) || l.servicio || '', liberadaEn: hoyISO(), liberadaActa: acta || '' };
+}
+// Asigna una línea a una persona y quita al usuario anterior
+function lnAsignar(l, usuarioId, nombre, acta){
+  const {usuarioNombre, usuarioEmpresa, equiposAsignados, libre, liberadaEn, liberadaActa, ...r} = l;
+  const antes = lnNombre(lnUsuario(l)) || l.anteriorUsuario || '';
+  return { ...r, usuarioId: usuarioId||'', mapeo: usuarioId ? 'Confirmado' : 'Sin usuario', anteriorUsuario: antes,
+    asignadaEn: hoyISO(), asignadaActa: acta||'', comentarios: usuarioId ? (l.comentarios||'') : `Asignada a ${nombre} con acta ${acta}; falta enlazar usuario en NexoIT` };
+}
 function lnEquipos(l){
   if(!l.usuarioId) return [];
   return equipo.filter(e=>e.usuarioId===l.usuarioId && e.estado==='Asignado');
@@ -901,6 +932,7 @@ function renderLnStats(){
     <div class="stat"><div class="num" style="color:#8A4B00;">${c('Renovar ya')}</div><div class="lbl">Renovar en ${LN_DIAS_YA} días</div></div>
     <div class="stat"><div class="num" style="color:#6B5900;">${c('Próxima')}</div><div class="lbl">Próximas (${LN_DIAS_PROX} días)</div></div>
     <div class="stat"><div class="num">${base.filter(lnPendiente).length}</div><div class="lbl">Por revisar usuario</div></div>
+    <div class="stat"><div class="num" style="color:var(--teal);">${base.filter(lnLibre).length}</div><div class="lbl">Libres para asignar</div></div>
     <div class="stat"><div class="num">${lnMoney(costo)}</div><div class="lbl">Costo mensual${costoRen<costo ? ' · renovado '+lnMoney(costoRen) : ''}</div></div>
   `;
   // Próximo bloque de renovaciones
@@ -929,6 +961,7 @@ function renderLnTable(){
     if(grupoF && l.grupo!==grupoF) return false;
     if(alertaF && lnAlerta(l)!==alertaF) return false;
     if(mapeoF==='pend' && !lnPendiente(l)) return false;
+    if(mapeoF==='libre' && !lnLibre(l)) return false;
     if(mapeoF==='ok' && lnPendiente(l)) return false;
     if(q){
       const u = lnUsuario(l);
@@ -943,6 +976,7 @@ function renderLnTable(){
     const u = lnUsuario(l), a = lnAlerta(l), d = lnDias(l), eqs = lnEquipos(l);
     const usuarioHtml = u
       ? `<b>${esc(lnNombre(u))}</b><div class="ln-sub">${esc(u.empresa||'')}</div>${l.mapeo==='Aproximado'?'<span class="tag rust" title="El nombre en la factura es distinto: confirma que es esta persona">Confirmar</span>':''}`
+      : lnLibre(l) ? `<span class="tag" style="background:#D1E7DD;color:#0F5132;">Libre</span>${l.anteriorUsuario?`<div class="ln-sub">Antes: ${esc(l.anteriorUsuario)}${l.liberadaEn?' · '+lnFecha(l.liberadaEn):''}${l.liberadaActa?' · '+esc(l.liberadaActa):''}</div>`:''}`
       : `<span class="tag rust">${l.mapeo==='Ambiguo'?'Elegir usuario':'Sin usuario'}</span>`;
     const eqHtml = eqs.length ? eqs.map(e=>`<div>${esc(e.placa||e.serie||'')}${e.equipo?' · '+esc(e.equipo):''}</div>`).join('') : '<span style="color:var(--ink-soft)">—</span>';
     const ren = (l.precioRenovacion!==undefined && l.precioRenovacion!=='' && Number(l.precioRenovacion)!==Number(l.precioActual)) ? `<div style="color:var(--teal);">→ ${lnMoney(l.precioRenovacion)}</div>` : '';
@@ -981,7 +1015,8 @@ function openLnModal(existing){
   const grupos = [...new Set(lineas.map(x=>x.grupo).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   const cuentas = [...new Set(lineas.map(x=>x.cuenta).filter(Boolean))];
   const us = [...usuarios].sort((a,b)=> String(a.empresa).localeCompare(String(b.empresa),'es') || lnNombre(a).localeCompare(lnNombre(b),'es'));
-  const optUs = '<option value="">— Sin usuario (línea de servicio o persona no registrada) —</option>' +
+  const optUs = `<option value="__libre" ${lnLibre(l)?'selected':''}>— Libre (disponible para asignar) —</option>` +
+    `<option value="" ${!l.usuarioId && !lnLibre(l)?'selected':''}>— Sin usuario (línea de servicio o persona no registrada) —</option>` +
     us.map(u=>`<option value="${esc(u.id)}" ${u.id===l.usuarioId?'selected':''}>${esc(u.empresa)} · ${esc(lnNombre(u))} (${esc(u.correo||'sin correo')})</option>`).join('');
   const aviso = l.mapeo==='Aproximado' ? `<div class="eq-resumen" style="margin:0 0 10px;">En la factura aparece como <b>${esc(l.servicio)}</b>. Confirma que el usuario elegido es correcto y guarda.</div>`
               : (l.mapeo==='Ambiguo' ? `<div class="eq-resumen" style="margin:0 0 10px;">Hay más de un usuario con este nombre: elige el correcto.</div>` : '');
@@ -1018,7 +1053,8 @@ window.saveLn = async function(id, isEdit){
   const linea = v('n_linea').replace(/[\s-]/g,'');
   if(!linea){ alert('Escribe el número de línea.'); return; }
   if(lineas.some(x=>x.id!==id && String(x.linea)===linea)){ alert('Esa línea ya existe en la lista.'); return; }
-  const usuarioId = v('n_usuario');
+  const selUs = v('n_usuario'), marcarLibre = selUs==='__libre';
+  const usuarioId = marcarLibre ? '' : selUs;
   let mapeo = previo.mapeo || '';
   if(!usuarioId) mapeo = 'Sin usuario';
   else if(usuarioId!==previo.usuarioId || mapeo!=='Exacto') mapeo = 'Confirmado';
@@ -1030,9 +1066,16 @@ window.saveLn = async function(id, isEdit){
     precioActual: num('n_precio'), precioRenovacion: num('n_precioRen'),
     fechaContrato: v('n_fContrato'), fechaRenovacion, accion: v('n_accion'), comentarios: v('n_coment')
   };
+  if(marcarLibre){
+    Object.assign(data, { mapeo:'Libre', libre:true, anteriorUsuario: lnLibre(previo) ? (previo.anteriorUsuario||'') : (lnNombre(lnUsuario(previo)) || previo.servicio || ''), liberadaEn: lnLibre(previo) ? (previo.liberadaEn||hoyISO()) : hoyISO() });
+  } else {
+    Object.assign(data, { libre:'', liberadaEn:'', liberadaActa:'' });
+    if(usuarioId && usuarioId!==previo.usuarioId && (previo.usuarioId || lnLibre(previo))) data.anteriorUsuario = lnNombre(lnUsuario(previo)) || previo.anteriorUsuario || '';
+  }
   const limpio = o => Object.fromEntries(Object.entries(o).filter(([,x])=>x!=='' && x!==null && x!==undefined));
   const sinCalculados = ({usuarioNombre, usuarioEmpresa, equiposAsignados, ...r}) => r;
   if(isEdit){ lineas = lineas.map(x=>x.id!==id ? x : limpio({...sinCalculados(x), usuarioId:'', fechaContrato:'', fechaRenovacion:'', comentarios:'', modelo:'', ...data})); }
+  if(!isEdit && marcarLibre) lineas = lineas.map(x=>x.id!==id ? x : {...x, liberadaEn: hoyISO()});
   else { lineas.push(limpio(data)); }
   const ok = await Storage.set('lineas', lineas);
   closeModal(); refreshLnUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Línea agregada ✓');
@@ -1341,7 +1384,7 @@ function aplicarFichaSalida(p){
     ${u ? `<div>Correo: ${esc(u.correo||'—')} · Gmail: ${esc(u.googleWorkspace||u.gmailPlan||'—')} · Dropbox: ${esc(u.dropbox||'—')}</div>` : ''}
     <div style="margin-top:4px;"><b>Equipos a su nombre</b> (se marcan como devueltos al guardar):</div>
     ${p.equipos.length ? p.equipos.map(e=>`<label><input type="checkbox" class="m_dev" value="${esc(e.id)}" checked> ${eqTxt(e)}${e===principal?' — <i>equipo principal del acta</i>':''}</label>`).join('') : '<div>Ninguno</div>'}
-    ${p.lineas.length ? `<div style="margin-top:4px;"><b>Líneas:</b> ${p.lineas.map(l=>`${esc(l.linea||'')}${String(l.celular||'').toUpperCase()==='SI'?' (con celular)':''}`).join(', ')}</div>` : ''}
+    ${p.lineas.length ? `<div style="margin-top:4px;"><b>Líneas</b> (quedan <b>libres</b> en Líneas al guardar, listas para asignar a otra persona):</div>${p.lineas.map(l=>`<label><input type="checkbox" class="m_ln_lib" value="${esc(l.id)}" checked> ${esc(l.linea||'')} · ${esc(l.grupo||'')}${String(l.celular||'').toUpperCase()==='SI'?' · con celular'+(l.modelo?' '+esc(l.modelo):''):''}</label>`).join('')}` : ''}
     <div class="falta-lista"></div></div>`;
   marcarFaltantesSalida();
 }
@@ -1417,10 +1460,12 @@ function openMovModal(tipo, pre={}){
           : fLbl('Tipo de salida') + fRad('m_motivo', SAL_TIPOS, SAL_TIPOS[0]) + '<div class="eq-resumen" style="margin:0 0 8px;">Meta: cierre en menos de 24 h</div>'}
 
     <div class="acta-sec">2 · ${ent?'Equipos entregados':'Equipos y activos devueltos'}</div>
-    <div class="field"><label>${ent?'Laptop que se entrega':'Laptop / PC que se devuelve'}</label><select id="m_equipo"><option value="">Elige el equipo</option>${lista}${ent?'':'<option value="ninguno">No devuelve laptop / PC</option>'}</select></div>
+    <div class="field"><label>${ent?'Laptop que se entrega':'Laptop / PC que se devuelve'}</label><select id="m_equipo"><option value="">Elige el equipo</option>${lista}${ent?'<option value="ninguno">Sin laptop (solo celular, línea u otros activos)</option>':'<option value="ninguno">No devuelve laptop / PC</option>'}</select></div>
     <div id="m_otro" class="grid2" style="display:none;">${fSel('m_o_marca','Marca',EQ_MARCAS,'','Elige la marca')}${fIn('m_o_modelo','Modelo')}${fIn('m_o_serie','N.º de serie')}${fSel('m_o_tipo','Tipo',EQ_TIPOS,'Laptop')}</div>
     <div class="grid2">${fSel('m_lap_estado','Estado de la laptop',estados,ent?'Nuevo':'Bueno / desgaste normal')}<div></div></div>
     <div class="grid2">${fIn('m_cel_modelo','Celular: marca / modelo (si aplica)')}${fIn('m_cel_imei','Celular: IMEI')}${fSel('m_cel_estado','Celular: estado',estados,'N/A')}${ent?fIn('m_sim','Línea telefónica / SIM'):'<div></div>'}</div>
+    ${ent ? `<div class="field"><label>Asignar línea telefónica</label><select id="m_linea_sel"><option value="">— No asignar línea / la escribo a mano —</option>${lnReasignables().map(({l,motivo})=>`<option value="${esc(l.id)}">${esc(l.linea)} · ${esc(l.grupo||'')} · ${esc(motivo)}${String(l.celular).toUpperCase()==='SI'?' · con celular'+(l.modelo?' '+esc(l.modelo):''):''}</option>`).join('')}</select></div>
+    <div id="m_linea_info" class="eq-resumen" style="display:none;margin:0 0 8px;"></div>` : ''}
     <div class="grid2">${fIn('m_otro_eq','Otro equipo: tipo y marca / modelo')}${fIn('m_otro_serie','Otro equipo: N.º de serie')}</div>
     ${fLbl('Accesorios celular')}${fChk('m_acc_cel',['Cargador','Cable USB'])}
     ${fLbl('Accesorios laptop')}${fChk('m_acc_lap', ent?['Cargador','Mochila / bolso','Mouse','Adaptador']:['Cargador','Mouse','Mochila / bolso','Adaptador'], ['Cargador'])}
@@ -1461,6 +1506,15 @@ function openMovModal(tipo, pre={}){
   showModal();
   prepararFirma('firmaCol'); prepararFirma('firmaIT');
   window.__fichaSal = null; window.__fichaEnt = null;
+  const selLn = document.getElementById('m_linea_sel');
+  if(selLn) selLn.onchange = () => {
+    const l = lineas.find(x=>x.id===selLn.value), info = document.getElementById('m_linea_info');
+    if(!l){ info.style.display='none'; return; }
+    document.getElementById('m_sim').value = l.linea;
+    if(String(l.celular).toUpperCase()==='SI' && l.modelo){ const cm = document.getElementById('m_cel_modelo'); if(!cm.value) cm.value = l.modelo; const ce = document.getElementById('m_cel_estado'); if(ce.value==='N/A') ce.value = 'Usado en óptimas condiciones'; }
+    const antes = lnNombre(lnUsuario(l)) || l.anteriorUsuario || l.servicio || '';
+    info.style.display=''; info.innerHTML = `Al guardar, la línea <b>${esc(l.linea)}</b> queda asignada a esta persona en Líneas${antes?` y se quita a <b>${esc(antes)}</b>`:''}.`;
+  };
   if(ent){
     const inp = document.getElementById('m_colaborador');
     const buscar = () => {
@@ -1678,6 +1732,20 @@ window.guardarMov = async function(tipo){
     m.equiposDevueltos = [origen, ...extrasDev].filter(Boolean).map(e=>({id:e.id, tipo:e.tipo, marca:e.fabricante, modelo:e.equipo, serie:e.serie, placa:e.placa||''}));
     m.lineasAsociadas = fichaSal.lineas.map(l=>({id:l.id, linea:l.linea, celular:l.celular}));
   }
+  const lnAntes = lineas;
+  if(ent){
+    const lid = gV('m_linea_sel'), l = lineas.find(x=>x.id===lid);
+    if(l){
+      m.lineaAsignada = { id:l.id, linea:l.linea, anterior: lnNombre(lnUsuario(l)) || l.anteriorUsuario || l.servicio || '' };
+      lineas = lineas.map(x=>x.id===l.id ? lnAsignar(x, m.usuarioId || (fichaEnt&&fichaEnt.usuarioId) || '', m.colaborador, m.numero) : x);
+    }
+  } else {
+    const liberar = new Set(gChk('m_ln_lib'));
+    if(liberar.size){
+      m.lineasLiberadas = lineas.filter(l=>liberar.has(l.id)).map(l=>({id:l.id, linea:l.linea}));
+      lineas = lineas.map(l=>liberar.has(l.id) ? lnLiberar(l, m.colaborador, m.numero) : l);
+    }
+  }
   const btn = document.getElementById('btnGuardarActa'); btn.disabled = true; btn.textContent = 'Guardando…';
   const eqAntes = equipo, luAntes = usadas, mvAntes = movs;
   const empNexo = m.empresa;
@@ -1713,14 +1781,15 @@ window.guardarMov = async function(tipo){
     });
   }
   movs = [...movs, m];
-  const ok = await Storage.set('movimientos', movs) && await Storage.set('equipos', equipo) && await Storage.set('laptops_usadas', usadas);
-  if(!ok){ equipo = eqAntes; usadas = luAntes; movs = mvAntes; btn.disabled=false; btn.textContent='Guardar y generar acta'; alert('No se pudo guardar. Revisa la conexión e intenta de nuevo.'); return; }
+  const lnCambio = lineas !== lnAntes;
+  const ok = await Storage.set('movimientos', movs) && await Storage.set('equipos', equipo) && await Storage.set('laptops_usadas', usadas) && (!lnCambio || await Storage.set('lineas', lineas));
+  if(!ok){ equipo = eqAntes; usadas = luAntes; movs = mvAntes; lineas = lnAntes; btn.disabled=false; btn.textContent='Guardar y generar acta'; alert('No se pudo guardar. Revisa la conexión e intenta de nuevo.'); return; }
   btn.textContent = 'Subiendo acta a Dropbox…';
   const path = await subirActa(m);
   if(path){ movs = movs.map(x=>x.id===m.id?{...x, estadoDropbox:'Subido', dropboxPath:path}:x); await Storage.set('movimientos', movs); }
   else { generarActaPDF(m).save(nombreActa(m)+'.pdf'); }
-  closeModal(); refreshEqUI(); refreshLuUI(); refreshMovUI();
-  toast((path ? `Acta ${m.numero} guardada en Dropbox ✓` : `Acta ${m.numero} registrada. Se descargó el PDF: súbelo a Acta Doc / ${MOV_CARPETA[m.clase]}.`) + (m.pendienteFirma ? ' Pendiente de firma.' : '') + (retirados.length ? ` Equipo anterior pasó a Laptops libres.` : ''));
+  closeModal(); refreshEqUI(); refreshLuUI(); refreshMovUI(); if(lnCambio && typeof refreshLnUI==='function') refreshLnUI();
+  toast((m.lineaAsignada ? `Línea ${m.lineaAsignada.linea} asignada. ` : '') + (m.lineasLiberadas && m.lineasLiberadas.length ? `Línea${m.lineasLiberadas.length>1?'s':''} ${m.lineasLiberadas.map(x=>x.linea).join(', ')} libre${m.lineasLiberadas.length>1?'s':''}. ` : '') + (path ? `Acta ${m.numero} guardada en Dropbox ✓` : `Acta ${m.numero} registrada. Se descargó el PDF: súbelo a Acta Doc / ${MOV_CARPETA[m.clase]}.`) + (m.pendienteFirma ? ' Pendiente de firma.' : '') + (retirados.length ? ` Equipo anterior pasó a Laptops libres.` : ''));
 };
 document.getElementById('btnMovEntrada').onclick = ()=>openMovModal('Entrada');
 document.getElementById('btnMovSalida').onclick = ()=>openMovModal('Salida');
