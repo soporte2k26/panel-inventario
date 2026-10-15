@@ -1234,6 +1234,49 @@ const ENT_ESTADO = ['Nuevo','Usado en óptimas condiciones','N/A'];
 const SAL_ESTADO = ['Excelente','Bueno / desgaste normal','Con daños','No devuelto','N/A'];
 const ENT_CUENTAS = ['Correo Google Workspace','Usuario Windows / equipo','Dropbox'];
 const MFA_OPC = ['Sí','Pendiente','No aplica'];
+// Sistemas extra según el área y la empresa del colaborador
+function sistemasExtra(depto, empresa){
+  const d = sinAcentos(depto), e = sinAcentos(empresa), r = [];
+  if(/contab|finanz|tesorer|cuentas por|planilla/.test(d)) r.push('Peachtree', 'Escritorio remoto');
+  if(/almacenaje|colinas|sg\.?\s*invest/.test(e)) r.push('Zoho CRM');
+  return r;
+}
+const SAL_ACC_SISTEMA = ['Usuario desactivado','Licencia liberada','Contraseña cambiada','Reasignado al reemplazo','N/A'];
+// Filas de la tabla de cuentas (form), conservando lo ya escrito
+function filasCuentasHTML(ent, depto, empresa, previo={}){
+  const fijos = ent ? [...ENT_CUENTAS, ...sistemasExtra(depto, empresa)]
+                    : [...SAL_ACCESOS, ...sistemasExtra(depto, empresa).map(x=>[x, SAL_ACC_SISTEMA])];
+  const v = (sis, k) => esc((previo[sis]||{})[k]||'');
+  const sel = (cls, opts, val) => `<select class="${cls}" style="width:100%">${opcionesLista(opts, val, '—')}</select>`;
+  const fila = (sis, opts) => {
+    const celSis = sis ? `<td><b>${esc(sis)}</b></td>` : `<td><input class="c_sis" type="text" style="width:100%"></td>`;
+    return ent
+      ? `<tr${sis?` data-sis="${esc(sis)}"`:''}>${celSis}<td><input class="c_usr" type="text" style="width:100%" value="${v(sis,'usuario')}"></td><td>${sel('c_mfa', MFA_OPC, (previo[sis]||{}).mfa||'')}</td><td><input class="c_f" type="date" style="width:100%" value="${v(sis,'fecha')}"></td></tr>`
+      : `<tr${sis?` data-sis="${esc(sis)}"`:''}>${celSis}<td>${sel('c_acc', opts, (previo[sis]||{}).accion||'')}</td><td><input class="c_asig" type="text" style="width:100%" value="${v(sis,'asignado')}"></td><td><input class="c_f" type="date" style="width:100%" value="${v(sis,'fecha')}"></td></tr>`;
+  };
+  return (ent ? fijos.map(s=>fila(s)) : fijos.map(([s,o])=>fila(s,o))).join('') + fila('', SAL_ACC_OTRO) + fila('', SAL_ACC_OTRO);
+}
+// Lee la tabla de cuentas del formulario
+function leerCuentas(ent){
+  return [...document.querySelectorAll('#m_cu_body tr')].map(tr=>{
+    const q = c => (tr.querySelector('.'+c)?.value||'').trim();
+    const sistema = tr.dataset.sis || q('c_sis');
+    return ent ? { sistema, usuario:q('c_usr'), mfa:q('c_mfa'), fecha:q('c_f'), fijo: !!tr.dataset.sis }
+               : { sistema, accion:q('c_acc'), asignado:q('c_asig'), fecha:q('c_f'), fijo: !!tr.dataset.sis };
+  });
+}
+// Vuelve a armar la tabla cuando cambia el departamento o la empresa
+function refrescarCuentas(){
+  const body = document.getElementById('m_cu_body'); if(!body) return;
+  const ent = body.dataset.ent==='1';
+  const clave = sinAcentos(gV('m_departamento')) + '|' + sinAcentos(gV('m_empresa'));
+  if(body.dataset.clave===clave) return;
+  const previo = {}; leerCuentas(ent).forEach(c=>{ if(c.fijo) previo[c.sistema] = c; });
+  const extras = [...body.querySelectorAll('tr:not([data-sis])')].map(tr=>[...tr.querySelectorAll('input,select')].map(x=>x.value));
+  body.innerHTML = filasCuentasHTML(ent, gV('m_departamento'), gV('m_empresa'), previo);
+  [...body.querySelectorAll('tr:not([data-sis])')].forEach((tr,i)=>{ (extras[i]||[]).forEach((val,j)=>{ const el = tr.querySelectorAll('input,select')[j]; if(el) el.value = val; }); });
+  body.dataset.clave = clave;
+}
 const SAL_ACCESOS = [
   ['Correo Google Workspace',['Contraseña cambiada y sesiones cerradas','Renombrado para el reemplazo','En custodia de IT hasta asignar reemplazo','Acceso delegado al jefe','N/A']],
   ['Dropbox',['Renombrado para el reemplazo','En custodia de IT hasta asignar reemplazo','Carpetas compartidas con el jefe','N/A']],
@@ -1396,6 +1439,7 @@ function aplicarFichaSalida(p){
     ${p.lineas.length ? `<div style="margin-top:4px;"><b>Líneas</b> (quedan <b>libres</b> en Líneas al guardar, listas para asignar a otra persona):</div>${p.lineas.map(l=>`<label><input type="checkbox" class="m_ln_lib" value="${esc(l.id)}" checked> ${esc(l.linea||'')} · ${esc(l.grupo||'')}${String(l.celular||'').toUpperCase()==='SI'?' · con celular'+(l.modelo?' '+esc(l.modelo):''):''}</label>`).join('')}` : ''}
     <div class="falta-lista"></div></div>`;
   marcarFaltantesSalida();
+  refrescarCuentas();
 }
 
 /* --- Directorio unificado: toda persona con equipo o línea existe en Usuarios --- */
@@ -1469,10 +1513,14 @@ function aplicarFichaEntrada(p){
   const emp = MOV_EMPRESAS.find(x=>sinAcentos(x)===sinAcentos(p.empresa)) || MOV_EMPRESAS.find(x=>p.empresa && (sinAcentos(p.empresa).includes(sinAcentos(x)) || sinAcentos(x).includes(sinAcentos(p.empresa))));
   if(emp) $('m_empresa').innerHTML = opcionesLista(MOV_EMPRESAS, emp, 'Elige la empresa');
   const u = p.usuario;
-  if(u){ setSi('m_cu_usr0', u.correo); if(u.dropbox && /@/.test(u.dropbox)) setSi('m_cu_usr2', u.dropbox); else if(u.dropbox && /s[ií]/i.test(u.dropbox)) setSi('m_cu_usr2', u.correo); }
+  refrescarCuentas();
+  const celdaUsr = sis => document.querySelector(`#m_cu_body tr[data-sis="${sis}"] .c_usr`);
+  const setCu = (sis, val) => { const el = celdaUsr(sis); if(el && val && !el.value) el.value = val; };
+  if(u){ setCu('Correo Google Workspace', u.correo); if(u.dropbox && /@/.test(u.dropbox)) setCu('Dropbox', u.dropbox); else if(u.dropbox && /s[ií]/i.test(u.dropbox)) setCu('Dropbox', u.correo); }
   const ln = p.lineas[0];
   if(ln){ setSi('m_sim', ln.linea); if(String(ln.celular||'').toUpperCase()==='SI') setSi('m_cel_modelo', ln.modelo); }
   pintarCambioEntrada(p.nombre, p.usuarioId);
+  refrescarCuentas();
 }
 
 function openMovModal(tipo, pre={}){
@@ -1514,11 +1562,10 @@ function openMovModal(tipo, pre={}){
     ${ent ? '' : fLbl('Otros activos') + fChk('m_otros_act',['Carnet / tarjeta de acceso','Llaves','Llave de seguridad MFA']) + fIn('m_otros_txt','Otro activo')}
 
     <div class="acta-sec">3 · ${ent?'Cuentas, accesos y MFA':'Accesos y cuentas'}</div>
+    <div class="eq-resumen" style="margin:0 0 6px;">Según el área y la empresa se agregan solos: <b>Contabilidad</b> → Peachtree y Escritorio remoto · <b>Almacenajes, Colinas o SG Investment</b> → Zoho CRM.</div>
     <div class="table-scroll"><table style="font-size:12px;">
       <thead><tr>${ent?'<th>Sistema</th><th>Usuario / cuenta creada</th><th>MFA activo</th><th>Fecha</th>':'<th>Sistema</th><th>Acción</th><th>Asignado a</th><th>Fecha</th>'}</tr></thead>
-      <tbody>${ent
-        ? [...ENT_CUENTAS,'','',''].map((s,i)=>`<tr>${s?`<td><b>${s}</b></td>`:tdIn('m_cu_sis'+i)}${tdIn('m_cu_usr'+i)}${tdSel('m_cu_mfa'+i,MFA_OPC)}${tdIn('m_cu_f'+i,'date')}</tr>`).join('')
-        : [...SAL_ACCESOS,['',SAL_ACC_OTRO],['',SAL_ACC_OTRO],['',SAL_ACC_OTRO]].map(([s,o],i)=>`<tr>${s?`<td><b>${s}</b></td>`:tdIn('m_ac_sis'+i)}${tdSel('m_ac_acc'+i,o)}${tdIn('m_ac_asig'+i)}${tdIn('m_ac_f'+i,'date')}</tr>`).join('')}</tbody>
+      <tbody id="m_cu_body" data-ent="${ent?'1':''}" data-clave="|">${filasCuentasHTML(ent, '', '')}</tbody>
     </table></div>
     ${ent ? `
       ${fLbl('Cuenta de correo y Dropbox')}${fRad('m_cuenta',['Nueva','Heredada del puesto'],'Nueva')}${fIn('m_heredada','Heredada del puesto, antes de')}
@@ -1548,6 +1595,7 @@ function openMovModal(tipo, pre={}){
   showModal();
   prepararFirma('firmaCol'); prepararFirma('firmaIT');
   window.__fichaSal = null; window.__fichaEnt = null;
+  ['input','change'].forEach(ev=>document.getElementById('modalBox').addEventListener(ev, e=>{ if(['m_departamento','m_empresa','m_colaborador','m_equipo'].includes(e.target.id)) setTimeout(refrescarCuentas, 0); }));
   const selLn = document.getElementById('m_linea_sel');
   if(selLn) selLn.onchange = () => {
     const l = lineas.find(x=>x.id===selLn.value), info = document.getElementById('m_linea_info');
@@ -1595,12 +1643,20 @@ function openMovModal(tipo, pre={}){
 }
 
 /* --- PDF con el diseño de los modelos de Grupo Semah --- */
+// Genera el acta y la compacta hasta que todo quepa en una sola hoja
 function generarActaPDF(m){
+  let doc = null;
+  for(let c = 0; c <= 4; c++){ doc = actaPDF(m, c); if(doc.getNumberOfPages()===1) break; }
+  return doc;
+}
+function actaPDF(m, c=0){
   const { jsPDF } = window.jspdf; const doc = new jsPDF({unit:'mm', format:'letter'});
+  // c = nivel de compactación (0 normal … 4 máximo)
+  const K = { fila: 4.6 - 0.2*c, sec: 5.2 - 0.35*c, f2: 4.7 - 0.2*c, op: 4.5 - 0.2*c, tf: 7.8 - 0.2*c, tl: 3.3 - 0.13*c, obs: 4 - 0.25*c, firma: 30 - 1.5*c };
   const W = 215.9, M = 15, R = W - M, ent = m.tipo==='Entrada';
   const ACC = [238,106,31], INK = [28,28,28], MUT = [107,107,107], LIN = [189,189,189], SOFT = [246,244,241];
   let y = 0;
-  const txt = (t, x, yy, o={}) => { doc.setFont('helvetica', o.b?'bold':'normal'); doc.setFontSize(o.s||8.5); doc.setTextColor(...(o.c||INK)); const op = {}; if(o.al) op.align = o.al; if(o.mw) op.maxWidth = o.mw; doc.text(Array.isArray(t) ? t : String(t??''), x, yy, op); };
+  const txt = (t, x, yy, o={}) => { doc.setFont('helvetica', o.b?'bold':'normal'); doc.setFontSize(o.s||8.5); doc.setTextColor(...(o.c||INK)); const op = {}; if(o.al) op.align = o.al; if(o.mw) op.maxWidth = o.mw; if(o.lh) op.lineHeightFactor = o.lh/((o.s||8.5)*0.352778); doc.text(Array.isArray(t) ? t : String(t??''), x, yy, op); };
   const salto = h => { if(y + h > 266){ doc.addPage(); y = 18; } };
   // encabezado
   const logo = document.querySelector('img[alt="Semah Group"]');
@@ -1611,19 +1667,19 @@ function generarActaPDF(m){
   txt(m.numero, R, 21.5, {b:1, s:8, c:ACC, al:'right'});
   doc.setDrawColor(...ACC); doc.setLineWidth(0.6); doc.line(M, 23.5, R, 23.5); doc.setLineWidth(0.2);
   y = 28.5;
-  const sec = (n, t) => { salto(12); y += 1; txt(n, M, y, {b:1, s:10, c:ACC}); txt(t, M+5, y, {b:1, s:10}); y += 5.2; };
+  const sec = (n, t) => { salto(12); y += 1 - 0.15*c; txt(n, M, y, {b:1, s:10, c:ACC}); txt(t, M+5, y, {b:1, s:10}); y += K.sec; };
   const campo = (lab, val, x, w) => { doc.setFont('helvetica','bold'); doc.setFontSize(8.5); const lw = doc.getTextWidth(lab) + 2;
     txt(lab, x, y, {b:1}); txt(val, x+lw, y-0.3, {mw:w-lw-1}); doc.setDrawColor(...LIN); doc.line(x+lw, y+1, x+w, y+1); };
-  const fila2 = (l1, v1, l2, v2) => { salto(6); campo(l1, v1, M, 92); if(l2) campo(l2, v2, M+98, R-M-98); y += 4.7; };
+  const fila2 = (l1, v1, l2, v2) => { salto(6); campo(l1, v1, M, 92); if(l2) campo(l2, v2, M+98, R-M-98); y += K.f2; };
   const caja = (x, yy, on) => { doc.setDrawColor(90); doc.rect(x, yy-2.6, 2.8, 2.8); if(on){ doc.setDrawColor(...INK); doc.line(x+0.5, yy-2.1, x+2.3, yy-0.3); doc.line(x+2.3, yy-2.1, x+0.5, yy-0.3); } };
   const opciones = (lab, opts, sel, x0=M) => { salto(6); let x = x0; if(lab){ txt(lab, x, y, {b:1}); doc.setFont('helvetica','bold'); x += doc.getTextWidth(lab)+3; }
     opts.forEach(o=>{ doc.setFont('helvetica','normal'); const w = doc.getTextWidth(o)+7; if(x + w > R){ y += 5; salto(6); x = M+3; }
-      caja(x, y, Array.isArray(sel) ? sel.includes(o) : sel===o); txt(o, x+4, y); x += w; }); y += 4.5; };
+      caja(x, y, Array.isArray(sel) ? sel.includes(o) : sel===o); txt(o, x+4, y); x += w; }); y += K.op; };
   const tabla = (heads, widths, rows) => {
-    const h = 4.6; salto(h*(rows.length+1)+2); let x = M;
+    const h = K.fila; salto(h*(rows.length+1)+2); let x = M;
     doc.setFillColor(...SOFT); doc.rect(M, y-4, R-M, h, 'F');
     heads.forEach((t,i)=>{ txt(t, x+1.5, y-0.2, {b:1, s:7.8}); x += widths[i]; });
-    const top = y-4; y += h-4+4;
+    const top = y-4; y += h;
     rows.forEach(r=>{ x = M; r.forEach((c,i)=>{ txt(c, x+1.5, y-0.2, {b:i===0, s:8, mw:widths[i]-3}); x += widths[i]; }); y += h; });
     doc.setDrawColor(...LIN); doc.rect(M, top, R-M, y-4-top);
     let xx = M; widths.slice(0,-1).forEach(w=>{ xx += w; doc.line(xx, top, xx, y-4); });
@@ -1659,7 +1715,9 @@ function generarActaPDF(m){
   // 3
   sec('3', ent?'Cuentas, accesos y MFA':'Accesos y cuentas');
   const filas = (m.cuentas||[]).map(c=> ent ? [c.sistema, c.usuario, c.mfa, fechaCorta(c.fecha)] : [c.sistema, c.accion, c.asignado, fechaCorta(c.fecha)]);
-  while(filas.length < (ent?6:7)) filas.push(['','','','']);
+  const minFilas = ent ? 6 : 7;
+  while(filas.length < minFilas) filas.push(['','','','']);
+  filas.push(['','','','']); // siempre una línea libre para escribir a mano
   tabla(ent?['Sistema','Usuario / cuenta creada','MFA activo','Fecha']:['Sistema','Acción','Asignado a','Fecha'], ent?[50,80,26,R-M-156]:[46,72,38,R-M-156], filas);
   if(ent){
     opciones('Cuenta de correo y Dropbox:', ['Nueva','Heredada del puesto'], m.cuentaTipo);
@@ -1674,14 +1732,14 @@ function generarActaPDF(m){
     sec('5','Inspección y observaciones');
     opciones('Estado general:', ['Excelente','Bueno / desgaste normal','Con daños o faltantes (detallar)'], m.estadoGeneral);
   }
-  const obs = doc.splitTextToSize(m.observaciones || '', R-M-4); const hObs = Math.max(8, obs.length*4+3);
+  const obs = doc.splitTextToSize(m.observaciones || '', R-M-4); const hObs = Math.max(8 - c, obs.length*K.obs+3);
   salto(hObs+2); doc.setDrawColor(...LIN); doc.roundedRect(M, y-3, R-M, hObs, 1.2, 1.2); txt(obs, M+2, y+1.2, {s:8.5}); y += hObs + 1;
   // términos
   sec(ent?'5':'6', ent?'Términos y condiciones de uso':'Declaración de conformidad');
   if(ent){ txt('Por medio de la presente firma, el colaborador declara y acepta que:', M, y, {s:8.3}); y += 4.2; }
-  (ent?TERM_ENT:TERM_SAL).forEach((t,i)=>{ doc.setFont('helvetica','normal'); doc.setFontSize(7.8); const l = doc.splitTextToSize(t, R-M-6); salto(l.length*3.3+1); txt(`${i+1}.`, M+1, y, {s:7.8}); txt(l, M+5, y, {s:7.8}); y += l.length*3.3 + 0.5; });
+  (ent?TERM_ENT:TERM_SAL).forEach((t,i)=>{ doc.setFont('helvetica','normal'); doc.setFontSize(K.tf); const l = doc.splitTextToSize(t, R-M-6); salto(l.length*K.tl+1); txt(`${i+1}.`, M+1, y, {s:K.tf}); txt(l, M+5, y, {s:K.tf, lh:K.tl}); y += l.length*K.tl + 0.5; });
   // firmas
-  y += 3; if(y + 30 > 272){ doc.addPage(); y = 18; }
+  y += 3 - 0.5*c; if(y + K.firma > 272){ doc.addPage(); y = 18; }
   const fw = (R-M-14)/2;
   [[m.firmaCol, ent?'Colaborador que recibe':'Colaborador que entrega', m.colaborador, M],
    [m.firmaIT, ent?'IT que entrega':'IT que recibe', m.itNombre, M+fw+14]].forEach(([img, rol, nom, x])=>{
@@ -1738,9 +1796,8 @@ window.guardarMov = async function(tipo){
     if(sinMarcar.length && confirm(`${gV('m_colaborador')} ya tiene asignado: ${sinMarcar.map(e=>`${e.equipo||e.tipo} (${e.serie||'sin serie'})`).join(', ')}.\n\n¿Es un cambio de equipo? Aceptar = retirar el anterior y pasarlo a Laptops libres.`)) retirados = [...retirados, ...sinMarcar];
   }
   const fecha = gV('m_fecha') || hoyISO();
-  const cuentas = ent
-    ? [...ENT_CUENTAS,'','',''].map((s,i)=>({sistema: s||gV('m_cu_sis'+i), usuario: gV('m_cu_usr'+i), mfa: gV('m_cu_mfa'+i), fecha: gV('m_cu_f'+i)}))
-    : [...SAL_ACCESOS.map(a=>a[0]),'','',''].map((s,i)=>({sistema: s||gV('m_ac_sis'+i), accion: gV('m_ac_acc'+i), asignado: gV('m_ac_asig'+i), fecha: gV('m_ac_f'+i)}));
+  refrescarCuentas();
+  const cuentas = leerCuentas(ent);
   const m = {
     id: uid('mv'), numero: '', tipo, motivo: gRad('m_motivo'), fecha,
     colaborador: gV('m_colaborador'), cedula: gV('m_cedula'), cargo: gV('m_cargo'), departamento: gV('m_departamento'), empresa: gV('m_empresa'), jefe: gV('m_jefe'),
@@ -1748,7 +1805,7 @@ window.guardarMov = async function(tipo){
     laptop: lap, celular: {modelo: gV('m_cel_modelo'), imei: gV('m_cel_imei'), estado: gV('m_cel_estado')},
     otroEquipo: (()=>{ const t = gV('m_otro_eq'); return t ? {tipo:'Otro', modelo:t, serie:gV('m_otro_serie')} : {}; })(),
     sim: gV('m_sim'), accCel: gChk('m_acc_cel'), accLap: gChk('m_acc_lap'), otrosActivos: gChk('m_otros_act'), otroActivo: gV('m_otros_txt'),
-    cuentas: cuentas.filter(c=>c.sistema && (c.usuario||c.mfa||c.accion||c.asignado||c.fecha||[...ENT_CUENTAS,...SAL_ACCESOS.map(a=>a[0])].includes(c.sistema))),
+    cuentas: cuentas.filter(c=>c.sistema).map(({fijo, ...c})=>c),
     cuentaTipo: gRad('m_cuenta'), heredadaDe: gV('m_heredada'), mfaEn: gRad('m_mfa_en'), bitwarden: gChk('m_bitwarden').length>0, seguridad: gChk('m_seg'),
     destino: gV('m_destino'), destinoFecha: gV('m_destino_f'), registro: gChk('m_reg'), estadoGeneral: gRad('m_estado_gral'),
     observaciones: limpiarTexto(gV('m_obs')), itNombre: gV('m_it'),
