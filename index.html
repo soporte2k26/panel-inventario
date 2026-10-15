@@ -659,7 +659,7 @@ window.saveLic = async function(id, isEdit){
     licenses.push(data);
   }
   await Storage.set('licencias', licenses);
-  closeModal(); refreshLicUI(); toast(readOnly?'⚠ No se guardó':'Guardado ✓');
+  closeModal(true); refreshLicUI(); toast(readOnly?'⚠ No se guardó':'Guardado ✓');
 }
 
 /* ---------- EQUIPOS ---------- */
@@ -777,13 +777,19 @@ window.saveEq = async function(id, isEdit){
     equipo.push(limpiarEquipo(data));
   }
   const ok = await Storage.set('equipos', equipo);
-  closeModal(); refreshEqUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Equipo agregado ✓');
+  closeModal(true); refreshEqUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Equipo agregado ✓');
 }
 
 /* ---------- modal helpers ---------- */
-function showModal(){ document.getElementById('overlay').classList.add('show'); }
-window.closeModal = function(){ document.getElementById('overlay').classList.remove('show'); document.getElementById('modalBox').classList.remove('ancho'); }
-document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeModal(); });
+function showModal(){ document.getElementById('modalBox').dataset.sucio = ''; document.getElementById('overlay').classList.add('show'); }
+// El formulario solo se cierra con sus botones (Cancelar / Guardar). Hacer clic o soltar el mouse afuera ya no lo cierra.
+window.closeModal = function(forzar){
+  const box = document.getElementById('modalBox');
+  if(forzar!==true && box.dataset.sucio==='1' && !confirm('¿Cerrar sin guardar? Se perderá lo que escribiste en este formulario.')) return;
+  box.dataset.sucio = '';
+  document.getElementById('overlay').classList.remove('show'); box.classList.remove('ancho');
+};
+['input','change'].forEach(ev=>document.getElementById('modalBox').addEventListener(ev, e=>{ if(e.isTrusted) document.getElementById('modalBox').dataset.sucio = '1'; }));
 
 /* ---------- refresh / wiring ---------- */
 function selectEmpresas(id){
@@ -1087,7 +1093,7 @@ window.saveLn = async function(id, isEdit){
   lineas = lineas.filter((x,i,arr)=>arr.findIndex(y=>y.id===x.id)===i);
   if(usCreado){ await Storage.set('usuarios', usuarios); await Storage.set('equipos', equipo); if(typeof refreshUserUI==='function') refreshUserUI(); if(typeof refreshEqUI==='function') refreshEqUI(); }
   const ok = await Storage.set('lineas', lineas);
-  closeModal(); refreshLnUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Línea agregada ✓');
+  closeModal(true); refreshLnUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Línea agregada ✓');
 }
 
 function refreshLnUI(){
@@ -1205,7 +1211,7 @@ window.saveLu = async function(id, isEdit){
   if(!data.empresa){ alert('Elige la empresa.'); return; }
   usadas = isEdit ? usadas.map(x=>x.id!==id ? x : {...x, ...data}) : [...usadas, data];
   const ok = await Storage.set('laptops_usadas', usadas);
-  closeModal(); refreshLuUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Laptop agregada ✓');
+  closeModal(true); refreshLuUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Laptop agregada ✓');
 };
 window.asignarLu = id => openMovModal('Entrada', { luId: id });
 window.delLu = async function(id){
@@ -1893,7 +1899,7 @@ window.guardarMov = async function(tipo){
   const path = await subirActa(m);
   if(path){ movs = movs.map(x=>x.id===m.id?{...x, estadoDropbox:'Subido', dropboxPath:path}:x); await Storage.set('movimientos', movs); }
   else { generarActaPDF(m).save(nombreActa(m)+'.pdf'); }
-  closeModal(); refreshEqUI(); refreshLuUI(); refreshMovUI(); if(lnCambio && typeof refreshLnUI==='function') refreshLnUI(); if(usCambio && typeof refreshUserUI==='function') refreshUserUI();
+  closeModal(true); refreshEqUI(); refreshLuUI(); refreshMovUI(); if(lnCambio && typeof refreshLnUI==='function') refreshLnUI(); if(usCambio && typeof refreshUserUI==='function') refreshUserUI();
   toast((usuarioCreado ? `${lnNombre(usuarioCreado)} agregado a Usuarios. ` : '') + (m.lineaAsignada ? `Línea ${m.lineaAsignada.linea} asignada. ` : '') + (m.lineasLiberadas && m.lineasLiberadas.length ? `Línea${m.lineasLiberadas.length>1?'s':''} ${m.lineasLiberadas.map(x=>x.linea).join(', ')} libre${m.lineasLiberadas.length>1?'s':''}. ` : '') + (path ? `Acta ${m.numero} guardada en Dropbox ✓` : `Acta ${m.numero} registrada. Se descargó el PDF: súbelo a Acta Doc / ${MOV_CARPETA[m.clase]}.`) + (m.pendienteFirma ? ' Pendiente de firma.' : '') + (retirados.length ? ` Equipo anterior pasó a Laptops libres.` : ''));
 };
 document.getElementById('btnMovEntrada').onclick = ()=>openMovModal('Entrada');
@@ -1984,7 +1990,7 @@ window.saveSys = async function(id, isEdit){
   if(!data.detalle){ alert('El servicio/detalle es obligatorio'); return; }
   if(isEdit){ sistemas = sistemas.map(s=>s.id===id?data:s); } else { sistemas.push(data); }
   await Storage.set('sistemas', sistemas);
-  closeModal(); refreshSysUI(); toast(readOnly?'⚠ No se guardó':'Guardado ✓');
+  closeModal(true); refreshSysUI(); toast(readOnly?'⚠ No se guardó':'Guardado ✓');
 }
 
 function refreshSysUI(){
@@ -2140,7 +2146,7 @@ window.saveUser = async function(id, isEdit){
   if(!data.empresa){ alert('Elige la empresa'); return; }
   usuarios = isEdit ? usuarios.map(u=>u.id===id?{...u, ...data}:u) : [...usuarios, data];
   const ok = await Storage.set('usuarios', usuarios);
-  closeModal(); refreshUserUI(); if(ok) toast('Guardado ✓');
+  closeModal(true); refreshUserUI(); if(ok) toast('Guardado ✓');
 }
 document.getElementById('btnAddUser').onclick = ()=>openUserModal(null);
 /* Clic en cualquier fila = abrir Editar (los botones siguen funcionando igual) */
