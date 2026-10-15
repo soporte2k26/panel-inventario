@@ -1017,7 +1017,8 @@ function openLnModal(existing){
   const us = [...usuarios].sort((a,b)=> String(a.empresa).localeCompare(String(b.empresa),'es') || lnNombre(a).localeCompare(lnNombre(b),'es'));
   const optUs = `<option value="__libre" ${lnLibre(l)?'selected':''}>— Libre (disponible para asignar) —</option>` +
     `<option value="" ${!l.usuarioId && !lnLibre(l)?'selected':''}>— Sin usuario (línea de servicio o persona no registrada) —</option>` +
-    us.map(u=>`<option value="${esc(u.id)}" ${u.id===l.usuarioId?'selected':''}>${esc(u.empresa)} · ${esc(lnNombre(u))} (${esc(u.correo||'sin correo')})</option>`).join('');
+    us.map(u=>`<option value="${esc(u.id)}" ${u.id===l.usuarioId?'selected':''}>${esc(u.empresa)} · ${esc(lnNombre(u))} (${esc(u.correo||'sin correo')})</option>`).join('') +
+    (()=>{ const solo = personasSoloEnEquipos(); return solo.length ? `<optgroup label="Con equipo pero sin usuario (se crea al guardar)">${solo.map(p=>`<option value="__eq:${esc(p.equipoId)}">${esc(p.empresa)} · ${esc(p.nombre)} (nuevo en Usuarios)</option>`).join('')}</optgroup>` : ''; })();
   const aviso = l.mapeo==='Aproximado' ? `<div class="eq-resumen" style="margin:0 0 10px;">En la factura aparece como <b>${esc(l.servicio)}</b>. Confirma que el usuario elegido es correcto y guarda.</div>`
               : (l.mapeo==='Ambiguo' ? `<div class="eq-resumen" style="margin:0 0 10px;">Hay más de un usuario con este nombre: elige el correcto.</div>` : '');
   document.getElementById('modalBox').innerHTML = `
@@ -1053,7 +1054,14 @@ window.saveLn = async function(id, isEdit){
   const linea = v('n_linea').replace(/[\s-]/g,'');
   if(!linea){ alert('Escribe el número de línea.'); return; }
   if(lineas.some(x=>x.id!==id && String(x.linea)===linea)){ alert('Esa línea ya existe en la lista.'); return; }
-  const selUs = v('n_usuario'), marcarLibre = selUs==='__libre';
+  let selUs = v('n_usuario'); const marcarLibre = selUs==='__libre';
+  let usCreado = null;
+  if(selUs.startsWith('__eq:')){
+    const e = equipo.find(x=>x.id===selUs.slice(5));
+    if(!e){ alert('No encontré ese equipo.'); return; }
+    const r = asegurarUsuario(e.usuario, e.empresa, ''); usCreado = r.creado ? r.u : null; selUs = r.u.id;
+    enlazarEquiposPorNombre(r.u);
+  }
   const usuarioId = marcarLibre ? '' : selUs;
   let mapeo = previo.mapeo || '';
   if(!usuarioId) mapeo = 'Sin usuario';
@@ -1075,8 +1083,9 @@ window.saveLn = async function(id, isEdit){
   const limpio = o => Object.fromEntries(Object.entries(o).filter(([,x])=>x!=='' && x!==null && x!==undefined));
   const sinCalculados = ({usuarioNombre, usuarioEmpresa, equiposAsignados, ...r}) => r;
   if(isEdit){ lineas = lineas.map(x=>x.id!==id ? x : limpio({...sinCalculados(x), usuarioId:'', fechaContrato:'', fechaRenovacion:'', comentarios:'', modelo:'', ...data})); }
-  if(!isEdit && marcarLibre) lineas = lineas.map(x=>x.id!==id ? x : {...x, liberadaEn: hoyISO()});
   else { lineas.push(limpio(data)); }
+  lineas = lineas.filter((x,i,arr)=>arr.findIndex(y=>y.id===x.id)===i);
+  if(usCreado){ await Storage.set('usuarios', usuarios); await Storage.set('equipos', equipo); if(typeof refreshUserUI==='function') refreshUserUI(); if(typeof refreshEqUI==='function') refreshEqUI(); }
   const ok = await Storage.set('lineas', lineas);
   closeModal(); refreshLnUI(); if(ok) toast(isEdit?'Cambios guardados ✓':'Línea agregada ✓');
 }
@@ -1387,6 +1396,39 @@ function aplicarFichaSalida(p){
     ${p.lineas.length ? `<div style="margin-top:4px;"><b>Líneas</b> (quedan <b>libres</b> en Líneas al guardar, listas para asignar a otra persona):</div>${p.lineas.map(l=>`<label><input type="checkbox" class="m_ln_lib" value="${esc(l.id)}" checked> ${esc(l.linea||'')} · ${esc(l.grupo||'')}${String(l.celular||'').toUpperCase()==='SI'?' · con celular'+(l.modelo?' '+esc(l.modelo):''):''}</label>`).join('')}` : ''}
     <div class="falta-lista"></div></div>`;
   marcarFaltantesSalida();
+}
+
+/* --- Directorio unificado: toda persona con equipo o línea existe en Usuarios --- */
+function buscarUsuarioPorNombre(nombre){
+  const n = normNom(nombre); if(!n) return null;
+  return usuarios.find(u=>normNom(lnNombre(u))===n) || null;
+}
+// Devuelve el usuario con ese nombre; si no existe lo crea (no guarda: quien llama guarda 'usuarios')
+function asegurarUsuario(nombre, empresa, correo){
+  const limpioNom = String(nombre||'').replace(/\s+/g,' ').trim();
+  let u = buscarUsuarioPorNombre(limpioNom);
+  if(u) return { u, creado:false };
+  const partes = limpioNom.split(' ');
+  const emp = EQ_EMPRESAS.find(x=>sinAcentos(x)===sinAcentos(empresa)) || empresa || '';
+  u = { id: uid('u'), nombre: partes.shift() || limpioNom, apellido: partes.join(' '), correo: correo||'', empresa: emp, googleWorkspace: correo ? (emp||'Sí') : '', gmailPlan:'', dropbox:'', origen:'Creado desde NexoIT' };
+  usuarios = [...usuarios, u];
+  return { u, creado:true };
+}
+// Enlaza al usuario todos los equipos que están a su nombre sin usuarioId
+function enlazarEquiposPorNombre(u){
+  const n = normNom(lnNombre(u)); let cambios = 0;
+  equipo = equipo.map(e=>{ if(!e.usuarioId && normNom(e.usuario)===n){ cambios++; return {...e, usuarioId:u.id}; } return e; });
+  return cambios;
+}
+// Personas que solo están en Equipos (sin usuario en NexoIT)
+function personasSoloEnEquipos(){
+  const vistos = new Set(), out = [];
+  equipo.forEach(e=>{
+    const nom = String(e.usuario||'').replace(/\s+/g,' ').trim(); const k = normNom(nom);
+    if(!k || e.usuarioId || vistos.has(k) || buscarUsuarioPorNombre(nom) || /^(equipo compartido|servidor)\b/i.test(sinAcentos(nom))) return;
+    vistos.add(k); out.push({ nombre: nom, empresa: e.empresa||'', equipoId: e.id });
+  });
+  return out.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
 }
 
 /* --- Entrada / cambio de equipo: ficha del colaborador y equipo anterior --- */
@@ -1716,6 +1758,12 @@ window.guardarMov = async function(tipo){
     estadoDropbox: 'Pendiente', dropboxPath: '', registrado: new Date().toISOString()
   };
   if(ent && fichaEnt) m.usuarioId = fichaEnt.usuarioId || '';
+  const usAntes = usuarios; let usuarioCreado = null;
+  if(ent && !m.usuarioId){
+    const correoActa = (m.cuentas||[]).find(c=>/correo/i.test(c.sistema||'') && /@/.test(c.usuario||''));
+    const r = asegurarUsuario(m.colaborador, m.empresa, correoActa ? correoActa.usuario : '');
+    m.usuarioId = r.u.id; if(r.creado) usuarioCreado = r.u;
+  }
   if(retirados.length){
     m.cambio = true; m.motivo = 'Cambio o reemplazo de equipo';
     m.equiposRetirados = retirados.map(e=>({id:e.id, tipo:e.tipo, marca:e.fabricante, modelo:e.equipo, serie:e.serie, placa:e.placa||''}));
@@ -1781,15 +1829,16 @@ window.guardarMov = async function(tipo){
     });
   }
   movs = [...movs, m];
-  const lnCambio = lineas !== lnAntes;
-  const ok = await Storage.set('movimientos', movs) && await Storage.set('equipos', equipo) && await Storage.set('laptops_usadas', usadas) && (!lnCambio || await Storage.set('lineas', lineas));
-  if(!ok){ equipo = eqAntes; usadas = luAntes; movs = mvAntes; lineas = lnAntes; btn.disabled=false; btn.textContent='Guardar y generar acta'; alert('No se pudo guardar. Revisa la conexión e intenta de nuevo.'); return; }
+  const lnCambio = lineas !== lnAntes, usCambio = usuarios !== usAntes;
+  if(usuarioCreado) enlazarEquiposPorNombre(usuarioCreado);
+  const ok = (!usCambio || await Storage.set('usuarios', usuarios)) && await Storage.set('movimientos', movs) && await Storage.set('equipos', equipo) && await Storage.set('laptops_usadas', usadas) && (!lnCambio || await Storage.set('lineas', lineas));
+  if(!ok){ equipo = eqAntes; usadas = luAntes; movs = mvAntes; lineas = lnAntes; usuarios = usAntes; btn.disabled=false; btn.textContent='Guardar y generar acta'; alert('No se pudo guardar. Revisa la conexión e intenta de nuevo.'); return; }
   btn.textContent = 'Subiendo acta a Dropbox…';
   const path = await subirActa(m);
   if(path){ movs = movs.map(x=>x.id===m.id?{...x, estadoDropbox:'Subido', dropboxPath:path}:x); await Storage.set('movimientos', movs); }
   else { generarActaPDF(m).save(nombreActa(m)+'.pdf'); }
-  closeModal(); refreshEqUI(); refreshLuUI(); refreshMovUI(); if(lnCambio && typeof refreshLnUI==='function') refreshLnUI();
-  toast((m.lineaAsignada ? `Línea ${m.lineaAsignada.linea} asignada. ` : '') + (m.lineasLiberadas && m.lineasLiberadas.length ? `Línea${m.lineasLiberadas.length>1?'s':''} ${m.lineasLiberadas.map(x=>x.linea).join(', ')} libre${m.lineasLiberadas.length>1?'s':''}. ` : '') + (path ? `Acta ${m.numero} guardada en Dropbox ✓` : `Acta ${m.numero} registrada. Se descargó el PDF: súbelo a Acta Doc / ${MOV_CARPETA[m.clase]}.`) + (m.pendienteFirma ? ' Pendiente de firma.' : '') + (retirados.length ? ` Equipo anterior pasó a Laptops libres.` : ''));
+  closeModal(); refreshEqUI(); refreshLuUI(); refreshMovUI(); if(lnCambio && typeof refreshLnUI==='function') refreshLnUI(); if(usCambio && typeof refreshUserUI==='function') refreshUserUI();
+  toast((usuarioCreado ? `${lnNombre(usuarioCreado)} agregado a Usuarios. ` : '') + (m.lineaAsignada ? `Línea ${m.lineaAsignada.linea} asignada. ` : '') + (m.lineasLiberadas && m.lineasLiberadas.length ? `Línea${m.lineasLiberadas.length>1?'s':''} ${m.lineasLiberadas.map(x=>x.linea).join(', ')} libre${m.lineasLiberadas.length>1?'s':''}. ` : '') + (path ? `Acta ${m.numero} guardada en Dropbox ✓` : `Acta ${m.numero} registrada. Se descargó el PDF: súbelo a Acta Doc / ${MOV_CARPETA[m.clase]}.`) + (m.pendienteFirma ? ' Pendiente de firma.' : '') + (retirados.length ? ` Equipo anterior pasó a Laptops libres.` : ''));
 };
 document.getElementById('btnMovEntrada').onclick = ()=>openMovModal('Entrada');
 document.getElementById('btnMovSalida').onclick = ()=>openMovModal('Salida');
