@@ -1311,7 +1311,6 @@ function marcarFaltantesSalida(){
   const box = document.getElementById('m_ficha'); if(!box) return;
   const faltan = [];
   SAL_REQ.forEach(([id,n])=>{ const el = document.getElementById(id); if(!el) return; const vacio = !String(el.value||'').trim(); el.closest('.field')?.classList.toggle('falta', vacio); if(vacio) faltan.push(n); });
-  ['firmaCol','firmaIT'].forEach((id,i)=>{ const cv = document.getElementById(id); if(cv && cv.dataset.vacia==='1') faltan.push(i ? 'Firma de IT' : 'Firma del colaborador'); });
   const fl = box.querySelector('.falta-lista');
   if(fl) fl.innerHTML = faltan.length ? `<b>Falta completar:</b> ${faltan.map(esc).join(', ')}` : '<span style="color:var(--teal)"><b>✓ Todo completo.</b></span>';
 }
@@ -1445,6 +1444,7 @@ function openMovModal(tipo, pre={}){
     <div class="acta-sec">${ent?'5 · Términos y condiciones de uso':'6 · Declaración de conformidad'}</div>
     <div class="terminos"><ol style="margin:0;padding-left:18px;">${(ent?TERM_ENT:TERM_SAL).map(t=>`<li>${t}</li>`).join('')}</ol></div>
     <div class="grid2" style="margin-top:10px;">${fIn('m_it', ent?'Nombre de IT que entrega':'Nombre de IT que recibe')}<div></div></div>
+    <div class="eq-resumen" style="margin:6px 0;">Las firmas son opcionales aquí. Al guardar, el acta se genera y se sube a Dropbox como <b>“por firmar”</b>; se firma después sobre ese PDF.</div>
     <div class="grid2">
       <div><div class="firma-box"><canvas id="firmaCol"></canvas><button class="secondary" onclick="borrarFirma('firmaCol')">Borrar</button></div><div style="font-size:11px;text-align:center;margin-top:4px;">Colaborador que ${ent?'recibe':'entrega'}</div></div>
       <div><div class="firma-box"><canvas id="firmaIT"></canvas><button class="secondary" onclick="borrarFirma('firmaIT')">Borrar</button></div><div style="font-size:11px;text-align:center;margin-top:4px;">IT que ${ent?'entrega':'recibe'}</div></div>
@@ -1620,8 +1620,6 @@ window.guardarMov = async function(tipo){
   if(!gV('m_empresa')){ alert('Elige la empresa.'); return; }
   if(!gV('m_it')){ alert('Escribe el nombre de la persona de IT.'); return; }
   const sinFirmaCol = document.getElementById('firmaCol').dataset.vacia==='1', sinFirmaIT = document.getElementById('firmaIT').dataset.vacia==='1';
-  if(!ent && (sinFirmaCol || sinFirmaIT)){ alert('Faltan las firmas del colaborador y de IT.'); return; }
-  if(ent && (sinFirmaCol || sinFirmaIT) && !confirm('El acta se generará sin ' + (sinFirmaCol && sinFirmaIT ? 'firmas' : sinFirmaCol ? 'la firma del colaborador' : 'la firma de IT') + ' y se subirá a Dropbox para firmarla. ¿Continuar?')) return;
   let origen = null, lap = {};
   if(sel.startsWith('lu:')){ origen = usadas.find(x=>x.id===sel.slice(3)); lap = {tipo:'Laptop', marca:origen.fabricante, modelo:origen.equipo, serie:origen.serie, procesador:origen.procesador, ram:origen.ram, disco:origen.disco}; }
   else if(sel.startsWith('eq:')){ origen = equipo.find(x=>x.id===sel.slice(3)); lap = {tipo:origen.tipo, marca:origen.fabricante, modelo:origen.equipo, serie:origen.serie, procesador:origen.procesador, ram:origen.ram, disco:origen.disco}; }
