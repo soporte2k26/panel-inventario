@@ -1568,8 +1568,8 @@ function openMovModal(tipo, pre={}){
       <tbody id="m_cu_body" data-ent="${ent?'1':''}" data-clave="|">${filasCuentasHTML(ent, '', '')}</tbody>
     </table></div>
     ${ent ? `
-      ${fLbl('Cuenta de correo y Dropbox')}${fRad('m_cuenta',['Nueva','Heredada del puesto'],'Nueva')}${fIn('m_heredada','Heredada del puesto, antes de')}
-      ${fLbl('MFA configurado por IT en')}${fRad('m_mfa_en',['Celular corporativo','Celular personal','Llave de seguridad'])}${fChk('m_bitwarden',['Códigos de respaldo en Bitwarden de IT'])}
+      ${fLbl('Cuenta de correo y Dropbox')}${fRad('m_cuenta',['Nueva','Heredada del puesto'],'Nueva')}
+      ${fLbl('MFA configurado por IT en')}${fRad('m_mfa_en',['Celular corporativo','Celular personal'])}
       ${fLbl('Seguridad del equipo')}${fChk('m_seg',['Antivirus activo','Disco cifrado (BitLocker)','Actualizaciones al día','Usuario sin permisos de administrador','Registrado en NexoIT'],['Registrado en NexoIT'])}
       <div class="acta-sec">4 · Observaciones</div>${fIn('m_obs','Observaciones')}`
     : `
@@ -1720,9 +1720,8 @@ function actaPDF(m, c=0){
   filas.push(['','','','']); // siempre una línea libre para escribir a mano
   tabla(ent?['Sistema','Usuario / cuenta creada','MFA activo','Fecha']:['Sistema','Acción','Asignado a','Fecha'], ent?[50,80,26,R-M-156]:[46,72,38,R-M-156], filas);
   if(ent){
-    opciones('Cuenta de correo y Dropbox:', ['Nueva','Heredada del puesto'], m.cuentaTipo);
-    if(m.cuentaTipo==='Heredada del puesto') fila2('Heredada del puesto, antes de:', m.heredadaDe, '', '');
-    opciones('MFA configurado por IT en:', ['Celular corporativo','Celular personal','Llave de seguridad','Códigos de respaldo en Bitwarden de IT'], [m.mfaEn, ...(m.bitwarden?['Códigos de respaldo en Bitwarden de IT']:[])]);
+    // Solo se imprime la opción elegida (sin nombre anterior, sin llave ni códigos de respaldo)
+    fila2('Cuenta de correo y Dropbox:', m.cuentaTipo || 'Nueva', 'MFA configurado por IT en:', ['Celular corporativo','Celular personal'].includes(m.mfaEn) ? m.mfaEn : '');
     opciones('Seguridad del equipo:', ['Antivirus activo','Disco cifrado (BitLocker)','Actualizaciones al día','Usuario sin permisos de administrador','Registrado en NexoIT'], m.seguridad||[]);
     sec('4','Observaciones');
   } else {
@@ -1806,7 +1805,7 @@ window.guardarMov = async function(tipo){
     otroEquipo: (()=>{ const t = gV('m_otro_eq'); return t ? {tipo:'Otro', modelo:t, serie:gV('m_otro_serie')} : {}; })(),
     sim: gV('m_sim'), accCel: gChk('m_acc_cel'), accLap: gChk('m_acc_lap'), otrosActivos: gChk('m_otros_act'), otroActivo: gV('m_otros_txt'),
     cuentas: cuentas.filter(c=>c.sistema).map(({fijo, ...c})=>c),
-    cuentaTipo: gRad('m_cuenta'), heredadaDe: gV('m_heredada'), mfaEn: gRad('m_mfa_en'), bitwarden: gChk('m_bitwarden').length>0, seguridad: gChk('m_seg'),
+    cuentaTipo: gRad('m_cuenta'), mfaEn: gRad('m_mfa_en'), seguridad: gChk('m_seg'),
     destino: gV('m_destino'), destinoFecha: gV('m_destino_f'), registro: gChk('m_reg'), estadoGeneral: gRad('m_estado_gral'),
     observaciones: limpiarTexto(gV('m_obs')), itNombre: gV('m_it'),
     firmaCol: sinFirmaCol ? '' : document.getElementById('firmaCol').toDataURL('image/png'),
