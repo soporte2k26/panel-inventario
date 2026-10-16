@@ -290,6 +290,7 @@
         <input type="text" id="movSearch" placeholder="Buscar por colaborador, acta, modelo o serie…">
         <button id="btnMovEntrada">+ Nueva entrada</button>
         <button id="btnMovSalida" class="secondary">+ Nueva salida</button>
+        <button id="btnRevisarFirmas" class="secondary" title="Busca en Dropbox las actas ya firmadas y les quita “por firmar”">↻ Revisar firmas</button>
       </div>
       <div class="table-scroll">
         <table>
@@ -1317,7 +1318,8 @@ function renderMovStats(){
     <div class="stat"><div class="num">${movs.length}</div><div class="lbl">Actas registradas</div></div>
     ${['Entrada','Salida','Cambio','Activos'].map(c=>`<div class="stat"><div class="num">${movs.filter(m=>claseActa(m)===c).length}</div><div class="lbl">${MOV_CARPETA[c]}</div></div>`).join('')}
     <div class="stat"><div class="num">${movs.filter(m=>(m.fecha||'').startsWith(mes)).length}</div><div class="lbl">Este mes</div></div>
-    <div class="stat"><div class="num">${movs.filter(m=>m.estadoDropbox!=='Subido').length}</div><div class="lbl">Pendientes de subir a Dropbox</div></div>`;
+    <div class="stat"><div class="num">${movs.filter(m=>m.estadoDropbox!=='Subido').length}</div><div class="lbl">Pendientes de subir a Dropbox</div></div>
+    <div class="stat"><div class="num" style="color:var(--rust);">${movs.filter(m=>m.pendienteFirma).length}</div><div class="lbl">Por firmar</div></div>`;
 }
 function renderMovTable(){
   const tF = document.getElementById('movTipoFilter').value;
@@ -1331,7 +1333,7 @@ function renderMovTable(){
       <td class="mono"><b>${esc(m.numero)}</b></td>
       <td class="mono">${esc(fechaCorta(m.fecha))}</td>
       <td><span class="tag ${m.tipo==='Entrada'?'':'rust'}">${esc(MOV_CLASE_TXT[claseActa(m)])}</span></td>
-      <td style="font-size:11px;">${esc(motivoTxt(m))}${m.pendienteFirma ? '<div><span class="tag rust">Por firmar</span></div>' : ''}</td>
+      <td style="font-size:11px;">${esc(motivoTxt(m))}${m.pendienteFirma ? '<div><span class="tag rust">Por firmar</span></div>' : (m.firmadoEn ? `<div><span class="tag" style="background:#D1E7DD;color:#0F5132;">✓ Firmada ${esc(fechaCorta(m.firmadoEn))}</span></div>` : '')}</td>
       <td><b>${esc(m.colaborador)}</b><div style="font-size:10.5px;color:var(--ink-soft)">${esc([m.cargo,m.departamento].filter(Boolean).join(' · '))}</div></td>
       <td><span class="tag">${esc(m.empresa||'—')}</span></td>
       <td>${esc(m.laptop&&m.laptop.modelo||'—')}<div class="mono" style="font-size:10.5px;color:var(--ink-soft)">${esc(m.laptop&&m.laptop.serie||'')}</div></td>
@@ -1339,6 +1341,7 @@ function renderMovTable(){
       <td class="row-actions">
         <button class="secondary" onclick="descargarActa('${m.id}')">PDF</button>
         ${m.estadoDropbox!=='Subido' ? `<button onclick="reintentarActa('${m.id}')">Subir</button>` : ''}
+        ${m.pendienteFirma ? `<button class="secondary" title="Marcar como firmada y quitar “por firmar” del archivo" onclick="marcarFirmada('${m.id}')">✓ Firmada</button>` : ''}
       </td>
     </tr>`).join('');
 }
@@ -1765,15 +1768,71 @@ async function subirActa(m){
     const b64 = generarActaPDF(m).output('datauristring').split(',')[1];
     const { data, error } = await window.__sb.functions.invoke('subir-acta', { body: { carpeta: MOV_CARPETA[claseActa(m)], nombre: nombreActa(m), pdfBase64: b64 } });
     if(error || !data || !data.ok) throw (error || new Error((data&&data.error)||'Error'));
+    subirActa.ultima = data;
     return data.path;
   }catch(e){ console.warn('Subida a Dropbox pendiente:', e); return null; }
 }
+// Datos del archivo recién subido: permiten seguirlo aunque lo muevan o renombren en Dropbox
+const metaSubida = () => { const d = subirActa.ultima; return d ? { dropboxId: d.id, dropboxHash: d.content_hash || '', dropboxSize: d.size || 0 } : {}; };
+const sinPorFirmar = n => String(n||'').replace(/\s*-\s*por firmar/ig,'').replace(/\s*-\s*(\.pdf)$/i,'$1').replace(/\s+(\.pdf)$/i,'$1');
+async function dbx(body){
+  const { data, error } = await window.__sb.functions.invoke('subir-acta', { body });
+  if(error){ let t = ''; try{ t = await error.context.text(); }catch(_){} throw new Error(t || error.message); }
+  return data;
+}
+// Revisa en Dropbox las actas "por firmar": si el PDF cambió (se firmó) o ya no dice "por firmar", la marca firmada
+let __revisando = false;
+async function revisarFirmas(silencioso){
+  if(__revisando || !window.__sb) return; __revisando = true;
+  const pend = movs.filter(m=>m.pendienteFirma && m.estadoDropbox==='Subido');
+  let firmadas = [], movidas = 0, errores = 0;
+  try{
+    if(!silencioso) toast(pend.length ? `Revisando ${pend.length} acta(s) en Dropbox…` : 'No hay actas por firmar.');
+    for(const m of pend){
+      try{
+        const f = await dbx({ accion:'estado', id: m.dropboxId, path: m.dropboxPath, numero: m.numero, nombre: m.colaborador, desde: m.registrado });
+        if(!f || !f.encontrado) continue;
+        const cambio = m.dropboxHash ? (f.content_hash && f.content_hash!==m.dropboxHash) : (Date.parse(f.client_modified) > Date.parse(m.registrado) + 180000);
+        const firmada = cambio || !/por firmar/i.test(f.name);
+        let act = { dropboxId: f.id, dropboxPath: f.path };
+        if(f.path !== m.dropboxPath) movidas++;
+        if(firmada){
+          const limpio = sinPorFirmar(f.name);
+          if(limpio !== f.name){ const r = await dbx({ accion:'renombrar', id: f.id, nuevoNombre: limpio }); if(r && r.ok) act.dropboxPath = r.path; }
+          act = { ...act, pendienteFirma: false, firmadoEn: (f.client_modified || f.server_modified || new Date().toISOString()).slice(0,10) };
+          firmadas.push(m.numero);
+        }
+        movs = movs.map(x=>x.id===m.id ? { ...x, ...act } : x);
+      }catch(e){ errores++; console.warn('Revisión de firma', m.numero, e); }
+    }
+    if(firmadas.length || movidas){ await Storage.set('movimientos', movs); refreshMovUI(); }
+    if(firmadas.length) toast(`✓ Firmada${firmadas.length>1?'s':''}: ${firmadas.join(', ')}. Se quitó “por firmar”.`);
+    else if(!silencioso) toast(errores ? 'No se pudo revisar Dropbox. Intenta más tarde.' : 'Ninguna acta nueva firmada todavía.');
+  } finally { __revisando = false; }
+}
+window.revisarFirmas = revisarFirmas;
+// Marcar a mano un acta como firmada (por ejemplo, si se firmó en papel)
+window.marcarFirmada = async id => {
+  const m = movs.find(x=>x.id===id); if(!m) return;
+  if(!confirm(`¿Marcar ${m.numero} de ${m.colaborador} como firmada? Se quitará “por firmar” del archivo en Dropbox.`)) return;
+  let act = { pendienteFirma: false, firmadoEn: hoyISO() };
+  try{
+    const f = await dbx({ accion:'estado', id: m.dropboxId, path: m.dropboxPath, numero: m.numero, nombre: m.colaborador, desde: m.registrado });
+    if(f && f.encontrado){
+      act = { ...act, dropboxId: f.id, dropboxPath: f.path };
+      const limpio = sinPorFirmar(f.name);
+      if(limpio !== f.name){ const r = await dbx({ accion:'renombrar', id: f.id, nuevoNombre: limpio }); if(r && r.ok) act.dropboxPath = r.path; }
+    }
+  }catch(e){ console.warn(e); toast('Se marcó firmada en NexoIT, pero no se pudo renombrar en Dropbox.'); }
+  movs = movs.map(x=>x.id===id ? { ...x, ...act } : x);
+  await Storage.set('movimientos', movs); refreshMovUI(); toast(`${m.numero} marcada como firmada ✓`);
+};
 window.descargarActa = id => { const m = movs.find(x=>x.id===id); if(m) generarActaPDF(m).save(nombreActa(m)+'.pdf'); };
 window.reintentarActa = async id => {
   const m = movs.find(x=>x.id===id); if(!m) return;
   toast('Subiendo a Dropbox…');
   const path = await subirActa(m);
-  if(path){ movs = movs.map(x=>x.id===id?{...x, estadoDropbox:'Subido', dropboxPath:path}:x); await Storage.set('movimientos', movs); refreshMovUI(); toast('Acta guardada en Dropbox ✓'); }
+  if(path){ movs = movs.map(x=>x.id===id?{...x, estadoDropbox:'Subido', dropboxPath:path, ...metaSubida()}:x); await Storage.set('movimientos', movs); refreshMovUI(); toast('Acta guardada en Dropbox ✓'); }
   else { toast('Dropbox todavía no está conectado. Descarga el PDF y súbelo a la carpeta.'); }
 };
 
@@ -1897,13 +1956,14 @@ window.guardarMov = async function(tipo){
   if(!ok){ equipo = eqAntes; usadas = luAntes; movs = mvAntes; lineas = lnAntes; usuarios = usAntes; btn.disabled=false; btn.textContent='Guardar y generar acta'; alert('No se pudo guardar. Revisa la conexión e intenta de nuevo.'); return; }
   btn.textContent = 'Subiendo acta a Dropbox…';
   const path = await subirActa(m);
-  if(path){ movs = movs.map(x=>x.id===m.id?{...x, estadoDropbox:'Subido', dropboxPath:path}:x); await Storage.set('movimientos', movs); }
+  if(path){ movs = movs.map(x=>x.id===m.id?{...x, estadoDropbox:'Subido', dropboxPath:path, ...metaSubida()}:x); await Storage.set('movimientos', movs); }
   else { generarActaPDF(m).save(nombreActa(m)+'.pdf'); }
   closeModal(true); refreshEqUI(); refreshLuUI(); refreshMovUI(); if(lnCambio && typeof refreshLnUI==='function') refreshLnUI(); if(usCambio && typeof refreshUserUI==='function') refreshUserUI();
   toast((usuarioCreado ? `${lnNombre(usuarioCreado)} agregado a Usuarios. ` : '') + (m.lineaAsignada ? `Línea ${m.lineaAsignada.linea} asignada. ` : '') + (m.lineasLiberadas && m.lineasLiberadas.length ? `Línea${m.lineasLiberadas.length>1?'s':''} ${m.lineasLiberadas.map(x=>x.linea).join(', ')} libre${m.lineasLiberadas.length>1?'s':''}. ` : '') + (path ? `Acta ${m.numero} guardada en Dropbox ✓` : `Acta ${m.numero} registrada. Se descargó el PDF: súbelo a Acta Doc / ${MOV_CARPETA[m.clase]}.`) + (m.pendienteFirma ? ' Pendiente de firma.' : '') + (retirados.length ? ` Equipo anterior pasó a Laptops libres.` : ''));
 };
 document.getElementById('btnMovEntrada').onclick = ()=>openMovModal('Entrada');
 document.getElementById('btnMovSalida').onclick = ()=>openMovModal('Salida');
+document.getElementById('btnRevisarFirmas').onclick = ()=>revisarFirmas(false);
 document.getElementById('movTipoFilter').onchange = renderMovTable;
 document.getElementById('movSearch').oninput = renderMovTable;
 
@@ -2253,6 +2313,7 @@ async function init(){
 
   actualizarMeta();
   refreshLicUI(); refreshEqUI(); refreshLuUI(); refreshMovUI(); refreshUserUI(); refreshSysUI(); refreshLnUI();
+  if(!window.__revFirmas){ window.__revFirmas = setInterval(()=>revisarFirmas(true), 10*60*1000); setTimeout(()=>revisarFirmas(true), 2500); }
   if(readOnly){ setSync('off'); toast('⚠ No hay conexión con la base de datos: los cambios no se guardarán'); }
   else setSync('ok','● Conectado a la nube');
 }
