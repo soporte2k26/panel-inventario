@@ -2130,11 +2130,11 @@ function renderUserTable(){
     if(q && !(((u.nombre||'')+' '+(u.apellido||'')).toLowerCase().includes(q) || (u.correo||'').toLowerCase().includes(q))) return false;
     return true;
   });
-  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="6" class="empty">Sin resultados.</td></tr>`; return; }
+  if(!rows.length && (q || licF)){ tbody.innerHTML = `<tr><td colspan="6" class="empty">Sin resultados.</td></tr>`; return; }
   const grupos = [...EMPRESAS, ...[...new Set(rows.map(u=>u.empresa))].filter(e=>!EMPRESAS.includes(e))];
   tbody.innerHTML = grupos.map(emp=>{
     const us = rows.filter(u=>u.empresa===emp).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
-    if(!us.length) return '';
+    if(!us.length) return (q || licF || (empresaF && empresaF!==emp)) ? '' : `<tr class="grupo"><td colspan="6">${esc((emp||'Sin empresa').toUpperCase())} &nbsp;·&nbsp; 0 usuarios</td></tr><tr><td colspan="6" class="empty" style="padding:14px;">Sin usuarios registrados para ${esc(emp)}. Usa “+ Nuevo usuario”.</td></tr>`;
     return `<tr class="grupo"><td colspan="6">${esc((emp||'Sin empresa').toUpperCase())} &nbsp;·&nbsp; Gmail: ${us.filter(tieneGmail).length} &nbsp;·&nbsp; Dropbox: ${us.filter(tieneDropbox).length} &nbsp;·&nbsp; ${us.length} usuarios</td></tr>` +
     us.map(u=>`
     <tr>
