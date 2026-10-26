@@ -1233,7 +1233,7 @@ const MOV_PREFIJO = { Entrada:'ENT', Salida:'SAL', Cambio:'CAM', Activos:'ACT' }
 const MOV_CLASE_TXT = { Entrada:'Entrada de personal', Salida:'Salida de personal', Cambio:'Cambio de equipo', Activos:'Entrega de activos' };
 // Clase del acta: define numeración y carpeta de Dropbox
 const claseActa = m => m.clase || (m.tipo==='Salida' ? 'Salida' : m.cambio ? 'Cambio' : m.motivo==='Ingreso de personal' ? 'Entrada' : 'Activos');
-const MOV_EMPRESAS = ['Almacenajes','Colinas','Haus','SG. Investment','Semah Properties','Coronado Mall','T. Storage'];
+const MOV_EMPRESAS = ['Almacenajes','Colinas','Haus','SG. Investment','Semah Properties','Docusafe','Coronado Mall','T. Storage'];
 const ENT_MOTIVOS = ['Ingreso de personal','Cambio o reemplazo de equipo','Entrega de activos'];
 const motivoTxt = m => m.motivo==='Asignación o reemplazo de equipo' ? (m.cambio ? 'Cambio o reemplazo de equipo' : 'Entrega de activos') : m.motivo;
 const SAL_TIPOS = ['Renuncia','Despido (bloqueo inmediato)','Fin de contrato','Traslado entre empresas'];
@@ -2071,9 +2071,9 @@ document.getElementById('btnTogglePw').onclick = function(){
 
 
 let usuarios = [];
-const EMPRESAS = ['Almacenajes','Colinas','Haus','SG. Investment','Semah Properties'];
+const EMPRESAS = ['Almacenajes','Colinas','Haus','SG. Investment','Semah Properties','Docusafe'];
 /* Catálogos de la pestaña Equipos activos */
-const EQ_EMPRESAS = ['Haus','Almacenajes','SG. Investment','Colinas','Semah Properties','Coronado Mall','T. Storage','Sin empresa asignada'];
+const EQ_EMPRESAS = ['Haus','Almacenajes','SG. Investment','Colinas','Semah Properties','Docusafe','Coronado Mall','T. Storage','Sin empresa asignada'];
 const EQ_TIPOS    = ['Laptop','PC All-in-One','PC de escritorio','Tablet','Servidor'];
 const EQ_ESTADOS  = ['Asignado','En reparación','En bodega','Por verificar','Dado de baja'];
 const EQ_MARCAS   = ['HP','Lenovo','Apple','Dell','Otra'];
