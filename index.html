@@ -1342,6 +1342,7 @@ function renderMovTable(){
       <td class="row-actions">
         <button class="secondary" onclick="descargarActa('${m.id}')">PDF</button>
         ${m.estadoDropbox!=='Subido' ? `<button onclick="reintentarActa('${m.id}')">Subir</button>` : ''}
+        ${m.pendienteFirma && m.estadoDropbox==='Subido' ? `<button class="secondary" title="Corregir datos del acta antes de que la firmen. Reemplaza el mismo archivo en Dropbox." onclick="editarActa('${m.id}')">✏️ Editar</button>` : ''}
         ${m.pendienteFirma ? `<button class="secondary" title="Marcar como firmada y quitar “por firmar” del archivo" onclick="marcarFirmada('${m.id}')">✓ Firmada</button>` : ''}
       </td>
     </tr>`).join('');
@@ -1845,6 +1846,94 @@ window.marcarFirmada = async id => {
   }catch(e){ console.warn(e); toast('Se marcó firmada en NexoIT, pero no se pudo renombrar en Dropbox.'); }
   movs = movs.map(x=>x.id===id ? { ...x, ...act } : x);
   await Storage.set('movimientos', movs); refreshMovUI(); toast(`${m.numero} marcada como firmada ✓`);
+};
+/* --- Corregir un acta "por firmar": reemplaza el mismo archivo en Dropbox --- */
+window.editarActa = id => {
+  const m = movs.find(x=>x.id===id); if(!m) return;
+  if(!m.pendienteFirma){ alert('Esta acta ya está firmada. Solo se pueden corregir actas “por firmar”.'); return; }
+  const ent = m.tipo==='Entrada', cl = claseActa(m), lap = m.laptop||{}, cel = m.celular||{}, otro = m.otroEquipo||{};
+  const estados = ent ? ENT_ESTADO : SAL_ESTADO;
+  const accLapOps = ent ? ['Cargador','Mochila / bolso','Mouse','Adaptador'] : ['Cargador','Mouse','Mochila / bolso','Adaptador'];
+  const box = document.getElementById('modalBox'); box.classList.add('ancho');
+  box.innerHTML = `
+    <h3>Corregir acta ${esc(m.numero)}</h3>
+    <div class="eq-resumen" style="margin:0 0 8px;">Corrige lo que haga falta antes de que la firmen. Al guardar se genera el PDF de nuevo y <b>reemplaza el mismo archivo</b> en Dropbox (sigue “por firmar”). Esto corrige el documento; no mueve equipos ni líneas en el inventario.</div>
+    <div class="acta-sec">1 · Datos del colaborador</div>
+    <div class="grid2">
+      ${fIn('e_colaborador','Nombre completo','text',m.colaborador||'')}${fIn('e_cedula','Cédula / identificación','text',m.cedula||'')}
+      ${fIn('e_cargo','Cargo','text',m.cargo||'')}${fIn('e_departamento','Departamento','text',m.departamento||'')}
+      ${fSel('e_empresa','Empresa',MOV_EMPRESAS,m.empresa||'','Elige la empresa')}${fIn('e_jefe','Jefe inmediato','text',m.jefe||'')}
+      ${fIn('e_fecha', ent?'Fecha de entrega':'Fecha de devolución','date',m.fecha||'')}
+      ${cl==='Entrada' ? fIn('e_ingreso','Fecha de ingreso (día 1)','date',m.fechaIngreso||'') + fIn('e_rrhh','Solicitud de RRHH recibida','date',m.solicitudRRHH||'') : ''}
+      ${!ent ? fIn('e_ultimo','Último día laboral','date',m.ultimoDia||'') : ''}
+    </div>
+    <div class="acta-sec">2 · ${ent?'Equipos entregados':'Equipos y activos devueltos'}</div>
+    <div class="grid2">
+      ${fIn('e_lap_marca','Laptop: marca','text',lap.marca||'')}${fIn('e_lap_modelo','Laptop: modelo','text',lap.modelo||'')}
+      ${fIn('e_lap_serie','Laptop: N.º de serie','text',lap.serie||'')}${fSel('e_lap_estado','Laptop: estado',estados,lap.estado||'','—')}
+      ${ent ? fIn('e_lap_cpu','Procesador','text',lap.procesador||'') + fIn('e_lap_ram','Memoria RAM','text',lap.ram||'') + fIn('e_lap_disco','Disco','text',lap.disco||'') + '<div></div>' : ''}
+      ${fIn('e_cel_modelo','Celular: marca / modelo','text',cel.modelo||'')}${fIn('e_cel_imei','Celular: IMEI','text',cel.imei||'')}
+      ${fSel('e_cel_estado','Celular: estado',estados,cel.estado||'','—')}${ent ? fIn('e_sim','Línea telefónica / SIM','text',m.sim||'') : '<div></div>'}
+      ${fIn('e_otro_eq','Otro equipo: tipo y marca / modelo','text',otro.modelo||'')}${fIn('e_otro_serie','Otro equipo: N.º de serie','text',otro.serie||'')}
+    </div>
+    ${fLbl('Accesorios celular')}${fChk('e_acc_cel',['Cargador','Cable USB'], m.accCel||[])}
+    ${fLbl('Accesorios laptop')}${fChk('e_acc_lap', accLapOps, m.accLap||[])}
+    <div class="acta-sec">Observaciones y firmas</div>
+    <div class="field"><label>Observaciones</label><textarea id="e_obs" rows="3" style="width:100%;">${esc(m.observaciones||'')}</textarea></div>
+    <div class="grid2">${fIn('e_it', ent?'Nombre de IT que entrega':'Nombre de IT que recibe','text',m.itNombre||'')}<div></div></div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancelar</button>
+      <button class="secondary" onclick="vistaEdicion('${m.id}')">Ver PDF</button>
+      <button id="btnGuardarEdicion" onclick="guardarEdicion('${m.id}')">Guardar y reemplazar en Dropbox</button>
+    </div>`;
+  showModal();
+};
+function actaEditada(m){
+  const ent = m.tipo==='Entrada', cl = claseActa(m);
+  const otroTxt = gV('e_otro_eq');
+  const e = {
+    colaborador: gV('e_colaborador') || m.colaborador, cedula: gV('e_cedula'), cargo: gV('e_cargo'), departamento: gV('e_departamento'),
+    empresa: gV('e_empresa'), jefe: gV('e_jefe'), fecha: gV('e_fecha') || m.fecha,
+    laptop: { ...(m.laptop||{}), marca: gV('e_lap_marca'), modelo: gV('e_lap_modelo'), serie: gV('e_lap_serie'), estado: gV('e_lap_estado') },
+    celular: { ...(m.celular||{}), modelo: gV('e_cel_modelo'), imei: gV('e_cel_imei'), estado: gV('e_cel_estado') },
+    otroEquipo: otroTxt ? { ...(m.otroEquipo||{}), tipo: (m.otroEquipo&&m.otroEquipo.tipo)||'Otro', modelo: otroTxt, serie: gV('e_otro_serie') } : {},
+    accCel: gChk('e_acc_cel'), accLap: gChk('e_acc_lap'),
+    observaciones: limpiarTexto(gV('e_obs')), itNombre: gV('e_it')
+  };
+  if(ent){ Object.assign(e.laptop, { procesador: gV('e_lap_cpu'), ram: gV('e_lap_ram'), disco: gV('e_lap_disco') }); e.sim = gV('e_sim'); }
+  if(cl==='Entrada'){ e.fechaIngreso = gV('e_ingreso'); e.solicitudRRHH = gV('e_rrhh'); }
+  if(!ent) e.ultimoDia = gV('e_ultimo');
+  return { ...m, ...e };
+}
+window.vistaEdicion = id => { const m = movs.find(x=>x.id===id); if(!m) return; const n = actaEditada(m); window.open(generarActaPDF(n).output('bloburl'), '_blank'); };
+window.guardarEdicion = async id => {
+  const m = movs.find(x=>x.id===id); if(!m) return;
+  const btn = document.getElementById('btnGuardarEdicion');
+  const n = actaEditada(m);
+  n.editadoEn = new Date().toISOString(); n.ediciones = (m.ediciones||0) + 1;
+  btn.disabled = true; btn.textContent = 'Reemplazando en Dropbox…';
+  try{
+    // Busca el archivo actual (por si lo movieron o renombraron) y confirma que sigue “por firmar”
+    const f = await dbx({ accion:'estado', id: m.dropboxId, path: m.dropboxPath, numero: m.numero, nombre: m.colaborador, desde: m.registrado });
+    if(!f || !f.encontrado) throw new Error('No encontré el archivo del acta en Dropbox.');
+    if(!/por firmar/i.test(f.name) || (m.dropboxHash && f.content_hash && f.content_hash!==m.dropboxHash)){
+      if(!confirm(`El archivo en Dropbox cambió (${f.name}). Puede que ya lo hayan firmado.\n\n¿Reemplazarlo igual con la versión corregida?`)) throw new Error('cancelado');
+      if(!/por firmar/i.test(f.name)) throw new Error('El acta en Dropbox ya no dice “por firmar”: parece firmada y no se reemplaza.');
+    }
+    const b64 = generarActaPDF(n).output('datauristring').split(',')[1];
+    const r = await dbx({ accion:'reemplazar', id: f.id, carpeta: MOV_CARPETA[claseActa(n)], nombre: nombreActa(n), pdfBase64: b64 });
+    if(!r || !r.ok) throw new Error((r && r.error) || 'Dropbox no aceptó el reemplazo.');
+    n.dropboxId = r.id; n.dropboxPath = r.path; n.dropboxHash = r.content_hash || ''; n.dropboxSize = r.size || 0; n.estadoDropbox = 'Subido';
+    movs = movs.map(x=>x.id===id ? n : x);
+    if(!await Storage.set('movimientos', movs)) throw new Error('Se reemplazó en Dropbox, pero no se pudo guardar en NexoIT. Vuelve a intentar.');
+    closeModal(true); refreshMovUI();
+    toast(`${n.numero} corregida ✓ Se reemplazó ${r.name} en Dropbox.` + (r.aviso ? ' ' + r.aviso : ''));
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Guardar y reemplazar en Dropbox';
+    if(e && e.message==='cancelado') return;
+    let msg = e && e.message || 'Error'; try{ const j = JSON.parse(msg); msg = j.error || msg; }catch(_){}
+    alert('No se pudo corregir el acta: ' + msg);
+  }
 };
 window.descargarActa = id => { const m = movs.find(x=>x.id===id); if(m) generarActaPDF(m).save(nombreActa(m)+'.pdf'); };
 window.reintentarActa = async id => {
