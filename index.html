@@ -285,11 +285,12 @@
     <!-- ENTRADAS Y SALIDAS VIEW -->
     <div id="view-movs" style="display:none;">
       <div class="stats" id="movStats"></div>
-      <div class="eq-resumen">Cada entrada o salida genera el acta en PDF con firmas y la guarda en Dropbox: <b>Acta Doc / Entradas de personal</b> o <b>Acta Doc / Salidas de personal</b>. El equipo cambia de lista automáticamente.</div>
+      <div class="eq-resumen">Cada acta se genera en PDF y se guarda en Dropbox según su tipo: <b>Entradas de personal</b> (ENT), <b>Salidas de personal</b> (SAL), <b>Cambio de Equipos</b> (CAM) o <b>Entrega de Activos</b> (ACT). Usa <b>Entrega de activo</b> cuando alguien que ya trabaja aquí recibe un celular, línea, iPad, router, monitor u otro activo sin devolver su equipo.</div>
       <div class="controls">
         <select id="movTipoFilter" aria-label="Tipo"><option value="">Todas las actas</option><option value="Entrada">Entradas de personal (ENT)</option><option value="Salida">Salidas de personal (SAL)</option><option value="Cambio">Cambio de equipos (CAM)</option><option value="Activos">Entrega de activos (ACT)</option></select>
         <input type="text" id="movSearch" placeholder="Buscar por colaborador, acta, modelo o serie…">
         <button id="btnMovEntrada">+ Nueva entrada</button>
+        <button id="btnMovActivo" class="secondary">+ Entrega de activo</button>
         <button id="btnMovSalida" class="secondary">+ Nueva salida</button>
         <button id="btnRevisarFirmas" class="secondary" title="Busca en Dropbox las actas ya firmadas y les quita “por firmar”">↻ Revisar firmas</button>
       </div>
@@ -1503,15 +1504,20 @@ function pintarCambioEntrada(nombre, usuarioId){
   const p = window.__fichaEnt && normNom(window.__fichaEnt.nombre)===normNom(nombre) ? window.__fichaEnt : null;
   const actuales = equiposActuales(nombre, usuarioId || (p&&p.usuarioId));
   const u = p && p.usuario;
+  const motivoCambio = gRad('m_motivo')==='Cambio o reemplazo de equipo';
+  const soloActivo = gRad('m_motivo')==='Entrega de activos';
   if(!actuales.length && !u){ box.innerHTML = ''; return; }
   const eqTxt = e => `${esc([e.tipo, e.fabricante, e.equipo].filter(Boolean).join(' ') || 'Equipo')} · serie ${esc(e.serie||'—')}${e.placa?` · placa ${esc(e.placa)}`:''}`;
   box.innerHTML = `<div class="ficha-sal">
     ${p ? `<div><b>${esc(p.nombre)}</b> · ${esc(p.empresa||'')}${u&&u.correo?` · ${esc(u.correo)}`:''}</div>` : ''}
-    ${actuales.length ? `<div style="margin-top:4px;color:var(--rust);"><b>Cambio de equipo:</b> esta persona ya tiene equipo asignado. Lo marcado se retira de Equipos activos y pasa a Laptops libres como “Por revisar”.</div>
-      ${actuales.map(e=>`<label><input type="checkbox" class="m_ret" value="${esc(e.id)}" checked> ${eqTxt(e)}</label>`).join('')}` : '<div>No tiene equipo asignado: es una entrega nueva.</div>'}
+    ${actuales.length ? (soloActivo
+        ? `<div style="margin-top:4px;">Ya tiene equipo asignado y <b>lo conserva</b>: ${actuales.map(eqTxt).join('; ')}.</div>`
+        : `<div style="margin-top:4px;color:var(--rust);"><b>Ya tiene equipo asignado.</b> Si es un cambio de equipo, marca lo que se retira (pasa a Laptops libres como “Por revisar”). Si solo recibe un activo adicional, deja todo sin marcar.</div>
+      ${actuales.map(e=>`<label><input type="checkbox" class="m_ret" value="${esc(e.id)}" ${motivoCambio?'checked':''}> ${eqTxt(e)}</label>`).join('')}`) : '<div>No tiene equipo asignado: es una entrega nueva.</div>'}
   </div>`;
-  const rm = document.querySelector(`input[name="m_motivo"][value="${actuales.length ? 'Cambio o reemplazo de equipo' : 'Entrega de activos'}"]`);
-  if(rm && (actuales.length || document.getElementById('m_equipo')?.value.startsWith('lu:'))) rm.checked = true;
+  // Si ya tiene equipo y el motivo era "Ingreso de personal", lo normal es entrega de activos (no se retira nada por defecto)
+  const rm = document.querySelector('input[name="m_motivo"][value="Entrega de activos"]');
+  if(rm && !motivoCambio && !soloActivo && (actuales.length || document.getElementById('m_equipo')?.value.startsWith('lu:'))) rm.checked = true;
 }
 function aplicarFichaEntrada(p){
   window.__fichaEnt = p;
@@ -1541,21 +1547,25 @@ function openMovModal(tipo, pre={}){
   const estados = ent ? ENT_ESTADO : SAL_ESTADO;
   const personal = ent ? personalEntrada() : personalConEquipo();
   const luPre = pre.luId ? usadas.find(x=>x.id===pre.luId) : null;
+  const act = ent && !!pre.activos;
   const box = document.getElementById('modalBox'); box.classList.add('ancho');
   box.innerHTML = `
-    <h3>${ent ? 'Acta de entrega de equipos y accesos tecnológicos' : 'Acta de devolución de equipos y cierre de accesos'}</h3>
+    <h3>${act ? 'Acta de entrega de activos' : ent ? 'Acta de entrega de equipos y accesos tecnológicos' : 'Acta de devolución de equipos y cierre de accesos'}</h3>
+    ${act ? '<div class="eq-resumen" style="margin:0 0 8px;">Para entregar un activo a alguien que ya trabaja aquí. <b>No se retira</b> su equipo actual. Se numera <b>ACT</b> y se guarda en <b>Entrega de Activos</b>.</div>' : ''}
     ${luPre ? `<div class="eq-resumen" style="margin:0 0 8px;">Asignando <b>${esc(luPre.equipo)}</b> · serie ${esc(luPre.serie||'sin serie')} desde Laptops libres. Escribe el nombre: si ya tiene equipo, se registra como <b>cambio de equipo</b>. Las firmas son opcionales: el acta se sube a Dropbox para que el colaborador la firme.</div>` : ''}
     <div class="acta-sec">1 · Datos del colaborador</div>
     <div class="grid2">
       ${ent ? fIn('m_colaborador','Nombre completo (busca en Usuarios o escribe uno nuevo)','text','','list="dl_personal" autocomplete="off" placeholder="Escribe el nombre…"') : fIn('m_colaborador','Nombre completo (busca en el personal con equipo)','text','','list="dl_personal" autocomplete="off" placeholder="Escribe el nombre…"')}${fIn('m_cedula','Cédula / identificación')}
       ${fIn('m_cargo','Cargo')}<div class="field"><label>Departamento</label><input id="m_departamento" type="text" list="dl_deptos_m"></div>
       ${fSel('m_empresa','Empresa',MOV_EMPRESAS,'','Elige la empresa')}${fIn('m_jefe','Jefe inmediato')}
-      ${ent ? fIn('m_ingreso','Fecha de ingreso (día 1)','date') + fIn('m_fecha','Fecha de entrega','date',hoyISO()) + fIn('m_rrhh','Solicitud de RRHH recibida','date')
+      ${act ? fIn('m_fecha','Fecha de entrega','date',hoyISO()) + '<div></div>'
+          : ent ? fIn('m_ingreso','Fecha de ingreso (día 1)','date') + fIn('m_fecha','Fecha de entrega','date',hoyISO()) + fIn('m_rrhh','Solicitud de RRHH recibida','date')
             : fIn('m_ultimo','Último día laboral','date') + fIn('m_fecha','Fecha de devolución','date',hoyISO()) + fIn('m_aviso','Aviso de RRHH a IT','datetime-local') + fIn('m_cierre','Cierre de IT','datetime-local')}
     </div>
     <datalist id="dl_deptos_m">${deptos.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
     <datalist id="dl_personal">${personal.map(p=>`<option value="${esc(p.etiqueta)}">`).join('')}</datalist><div id="m_ficha"></div>
-    ${ent ? fLbl('Motivo') + fRad('m_motivo', ENT_MOTIVOS, ENT_MOTIVOS[0]) + '<div class="eq-resumen" style="margin:0 0 8px;">Meta: todo listo antes del día 1</div>'
+    ${act ? '<input type="radio" name="m_motivo" value="Entrega de activos" checked hidden>'
+          : ent ? fLbl('Motivo') + fRad('m_motivo', ENT_MOTIVOS, ENT_MOTIVOS[0]) + '<div class="eq-resumen" style="margin:0 0 8px;">Meta: todo listo antes del día 1</div>'
           : fLbl('Tipo de salida') + fRad('m_motivo', SAL_TIPOS, SAL_TIPOS[0]) + '<div class="eq-resumen" style="margin:0 0 8px;">Meta: cierre en menos de 24 h</div>'}
 
     <div class="acta-sec">2 · ${ent?'Equipos entregados':'Equipos y activos devueltos'}</div>
@@ -1645,6 +1655,12 @@ function openMovModal(tipo, pre={}){
     if(v.startsWith('lu:')){ const x = usadas.find(y=>y.id===v.slice(3)); if(!x) return;
       setEmp(x.empresa); document.getElementById('m_lap_estado').value = 'Usado en óptimas condiciones'; }
   };
+  if(act){ const sel = document.getElementById('m_equipo'); sel.value = 'ninguno'; document.getElementById('m_lap_estado').value = 'N/A'; }
+  // Al cambiar el motivo: solo un cambio de equipo marca lo que se retira
+  document.querySelectorAll('input[name="m_motivo"]').forEach(r=>r.addEventListener('change', ()=>{
+    const esCambio = gRad('m_motivo')==='Cambio o reemplazo de equipo';
+    document.querySelectorAll('.m_ret').forEach(c=>{ c.checked = esCambio; });
+  }));
   if(luPre){
     const sel = document.getElementById('m_equipo'); sel.value = 'lu:'+luPre.id; sel.onchange({target: sel});
     const r = document.querySelector('input[name="m_motivo"][value="Entrega de activos"]'); if(r) r.checked = true;
@@ -1701,7 +1717,9 @@ function actaPDF(m, c=0){
   fila2('Nombre completo:', m.colaborador, 'Cédula / Identificación:', m.cedula);
   fila2('Cargo:', m.cargo, 'Departamento:', m.departamento);
   fila2('Empresa:', m.empresa, 'Jefe inmediato:', m.jefe);
-  if(ent){
+  if(ent && cl!=='Entrada'){
+    fila2('Fecha de entrega:', fechaCorta(m.fecha), 'Motivo:', motivoTxt(m));
+  } else if(ent){
     fila2('Fecha de ingreso (día 1):', fechaCorta(m.fechaIngreso), 'Fecha de entrega:', fechaCorta(m.fecha));
     fila2('Solicitud de RRHH recibida:', fechaCorta(m.solicitudRRHH), 'Motivo:', motivoTxt(m));
   } else {
@@ -1709,7 +1727,8 @@ function actaPDF(m, c=0){
     fila2('Aviso de RRHH a IT:', fechaCorta(m.avisoRRHH), 'Cierre de IT:', fechaCorta(m.cierreIT));
     opciones('Tipo de salida:', SAL_TIPOS, m.motivo);
   }
-  txt(ent?'Meta: todo listo antes del día 1':'Meta: cierre en menos de 24 h', R, y-1.5, {b:1, s:7.8, c:MUT, al:'right'}); y += 3;
+  if(!ent || cl==='Entrada') txt(ent?'Meta: todo listo antes del día 1':'Meta: cierre en menos de 24 h', R, y-1.5, {b:1, s:7.8, c:MUT, al:'right'});
+  y += 3;
   // 2
   sec('2', ent?'Equipos entregados':'Equipos y activos devueltos');
   tabla(['Equipo','Marca / Modelo','N.º de serie / IMEI','Estado'], [30,58,46,R-M-134], [
@@ -1857,7 +1876,8 @@ window.guardarMov = async function(tipo){
     const actuales = equiposActuales(gV('m_colaborador'), fichaEnt && fichaEnt.usuarioId);
     retirados = actuales.filter(e=>marcados.has(e.id));
     const sinMarcar = actuales.filter(e=>!marcados.has(e.id) && !document.querySelector(`.m_ret[value="${e.id}"]`));
-    if(sinMarcar.length && confirm(`${gV('m_colaborador')} ya tiene asignado: ${sinMarcar.map(e=>`${e.equipo||e.tipo} (${e.serie||'sin serie'})`).join(', ')}.\n\n¿Es un cambio de equipo? Aceptar = retirar el anterior y pasarlo a Laptops libres.`)) retirados = [...retirados, ...sinMarcar];
+    // Entrega de activos: no se pregunta; solo se retira lo que se haya marcado a propósito
+    if(gRad('m_motivo')!=='Entrega de activos' && sinMarcar.length && confirm(`${gV('m_colaborador')} ya tiene asignado: ${sinMarcar.map(e=>`${e.equipo||e.tipo} (${e.serie||'sin serie'})`).join(', ')}.\n\n¿Es un cambio de equipo? Aceptar = retirar el anterior y pasarlo a Laptops libres.`)) retirados = [...retirados, ...sinMarcar];
   }
   const fecha = gV('m_fecha') || hoyISO();
   refrescarCuentas();
@@ -1963,6 +1983,7 @@ window.guardarMov = async function(tipo){
 };
 document.getElementById('btnMovEntrada').onclick = ()=>openMovModal('Entrada');
 document.getElementById('btnMovSalida').onclick = ()=>openMovModal('Salida');
+document.getElementById('btnMovActivo').onclick = ()=>openMovModal('Entrada', { activos: true });
 document.getElementById('btnRevisarFirmas').onclick = ()=>revisarFirmas(false);
 document.getElementById('movTipoFilter').onchange = renderMovTable;
 document.getElementById('movSearch').oninput = renderMovTable;
