@@ -394,25 +394,6 @@
       </div>
     </div>
 
-    <!-- SISTEMAS VIEW -->
-    <div id="view-sistemas" style="display:none;">
-      <div class="stats" id="sysStats"></div>
-      <div class="controls">
-        <select id="sysEmpresaFilter"><option value="">Todas las empresas</option></select>
-        <select id="sysRubroFilter"><option value="">Todos los rubros</option></select>
-        <input type="text" id="sysSearch" placeholder="Buscar por servicio, usuario o empresa…">
-        <button id="btnAddSys">+ Nueva credencial</button>
-        <button class="secondary" id="btnTogglePw">Mostrar contraseñas</button>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr>
-            <th>Empresa</th><th>Rubro</th><th>Servicio</th><th>Usuario</th><th>Contraseña</th><th>Link</th><th></th>
-          </tr></thead>
-          <tbody id="sysTbody"></tbody>
-        </table>
-      </div>
-    </div>
 
   </div>
 
@@ -455,7 +436,6 @@
 <script>
 const EQUIP_SEED = []; // los datos viven solo en Supabase (protegidos con inicio de sesión)
 const LIC_SEED = []; // los datos viven solo en Supabase (protegidos con inicio de sesión)
-const SISTEMAS_SEED = []; // los datos viven solo en Supabase (protegidos con inicio de sesión)
 const USERS_SEED = []; // los datos viven solo en Supabase (protegidos con inicio de sesión)
 
 /* ---------------- STORAGE ADAPTER (Supabase) ----------------
@@ -851,7 +831,6 @@ document.querySelectorAll('.tab').forEach(tab=>{
     document.getElementById('view-usadas').style.display = view==='usadas' ? '' : 'none';
     document.getElementById('view-movs').style.display = view==='movs' ? '' : 'none';
     document.getElementById('view-usuarios').style.display = view==='usuarios' ? '' : 'none';
-    document.getElementById('view-sistemas').style.display = view==='sistemas' ? '' : 'none';
     document.getElementById('view-lineas').style.display = view==='lineas' ? '' : 'none';
   });
 });
@@ -2077,107 +2056,6 @@ document.getElementById('btnRevisarFirmas').onclick = ()=>revisarFirmas(false);
 document.getElementById('movTipoFilter').onchange = renderMovTable;
 document.getElementById('movSearch').oninput = renderMovTable;
 
-let sistemas = [];
-let pwVisible = false;
-
-function renderSysStats(){
-  const empresas = new Set(sistemas.map(s=>s.empresa)).size;
-  const rubros = new Set(sistemas.map(s=>s.rubro)).size;
-  document.getElementById('sysStats').innerHTML = `
-    <div class="stat"><div class="num">${sistemas.length}</div><div class="lbl">Credenciales guardadas</div></div>
-    <div class="stat"><div class="num">${rubros}</div><div class="lbl">Rubros / categorías</div></div>
-    <div class="stat"><div class="num">${empresas}</div><div class="lbl">Empresas</div></div>
-  `;
-}
-
-function renderSysTable(){
-  const empresaF = document.getElementById('sysEmpresaFilter').value;
-  const rubroF = document.getElementById('sysRubroFilter').value;
-  const q = document.getElementById('sysSearch').value.trim().toLowerCase();
-  const tbody = document.getElementById('sysTbody');
-  const rows = sistemas.filter(s=>{
-    if(empresaF && s.empresa !== empresaF) return false;
-    if(rubroF && s.rubro !== rubroF) return false;
-    if(q && !((s.detalle||'').toLowerCase().includes(q) || (s.usuario||'').toLowerCase().includes(q) || (s.empresa||'').toLowerCase().includes(q))) return false;
-    return true;
-  });
-  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="7" class="empty">Sin resultados.</td></tr>`; return; }
-  tbody.innerHTML = rows.map(s=>`
-    <tr>
-      <td><span class="tag">${esc(s.empresa)}</span></td>
-      <td>${esc(s.rubro)}</td>
-      <td><b>${esc(s.detalle)}</b></td>
-      <td class="mono" style="font-size:11px;">${esc(s.usuario||'—')}</td>
-      <td class="mono sys-pw" data-pw="${esc(s.password)}" style="font-size:11px;">${/bitwarden/i.test(s.password||'') ? '🔒 Bitwarden' : (pwVisible ? esc(s.password||'—') : (s.password ? '••••••••' : '—'))}</td>
-      <td>${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener" style="color:var(--teal);">abrir ↗</a>` : '—'}</td>
-      <td class="row-actions">
-        <button class="secondary" onclick="editSys('${s.id}')">Editar</button>
-        <button class="danger" onclick="delSys('${s.id}')">Eliminar</button>
-      </td>
-    </tr>
-  `).join('');
-}
-
-window.editSys = function(id){ openSysModal(sistemas.find(s=>s.id===id)); }
-window.delSys = async function(id){
-  if(!confirm('¿Eliminar esta credencial?')) return;
-  sistemas = sistemas.filter(s=>s.id!==id);
-  const ok = await Storage.set('sistemas', sistemas);
-  refreshSysUI(); if(ok) toast('Credencial eliminada');
-}
-
-function openSysModal(existing){
-  const isEdit = !!existing;
-  const s = existing || {id:uid('sys'), empresa:'', rubro:'', detalle:'', usuario:'', password:'', link:''};
-  document.getElementById('modalBox').innerHTML = `
-    <h3>${isEdit?'Editar':'Nueva'} credencial</h3>
-    <div class="field"><label>Empresa</label><select id="s_empresa">${opcionesEmpresa(s.empresa)}</select></div>
-    <datalist id="dl_rubros">${[...new Set(['WiFi','Gmail','iCloud','Zoom','VPS','Hosting/Dominio','Pagina Web','SEO','CRM','ERP',...sistemas.map(x=>x.rubro)].filter(Boolean))].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
-    <div class="field"><label>Rubro / categoría</label><input id="s_rubro" type="text" list="dl_rubros" value="${esc(s.rubro)}" placeholder="WiFi, iCloud, WordPress, VPS…"></div>
-    <div class="field"><label>Servicio / detalle</label><input id="s_detalle" type="text" value="${esc(s.detalle)}"></div>
-    <div class="field"><label>Usuario</label><input id="s_usuario" type="text" value="${esc(s.usuario)}"></div>
-    <div class="field"><label>Contraseña <span style="text-transform:none;font-weight:normal;">(para claves importantes escribe “🔒 En Bitwarden”)</span></label><input id="s_password" type="text" value="${esc(s.password)}" list="dl_bw"></div>
-    <datalist id="dl_bw"><option value="🔒 En Bitwarden"></datalist>
-    <div class="field"><label>Link (opcional)</label><input id="s_link" type="text" value="${esc(s.link)}"></div>
-    <div class="modal-actions">
-      <button class="secondary" onclick="closeModal()">Cancelar</button>
-      <button onclick="saveSys('${s.id}', ${isEdit})">Guardar</button>
-    </div>
-  `;
-  showModal();
-}
-
-window.saveSys = async function(id, isEdit){
-  const data = {
-    id,
-    empresa: document.getElementById('s_empresa').value.trim(),
-    rubro: document.getElementById('s_rubro').value.trim(),
-    detalle: document.getElementById('s_detalle').value.trim(),
-    usuario: document.getElementById('s_usuario').value.trim(),
-    password: document.getElementById('s_password').value.trim(),
-    link: document.getElementById('s_link').value.trim(),
-  };
-  if(!data.detalle){ alert('El servicio/detalle es obligatorio'); return; }
-  if(isEdit){ sistemas = sistemas.map(s=>s.id===id?data:s); } else { sistemas.push(data); }
-  await Storage.set('sistemas', sistemas);
-  closeModal(true); refreshSysUI(); toast(readOnly?'⚠ No se guardó':'Guardado ✓');
-}
-
-function refreshSysUI(){
-  fillSelect(document.getElementById('sysEmpresaFilter'), sistemas.map(s=>s.empresa));
-  fillSelect(document.getElementById('sysRubroFilter'), sistemas.map(s=>s.rubro));
-  renderSysStats(); renderSysTable(); if(typeof sincronizar==='function') sincronizar();
-}
-document.getElementById('sysEmpresaFilter').onchange = renderSysTable;
-document.getElementById('sysRubroFilter').onchange = renderSysTable;
-document.getElementById('sysSearch').oninput = renderSysTable;
-document.getElementById('btnAddSys').onclick = ()=>openSysModal(null);
-document.getElementById('btnTogglePw').onclick = function(){
-  pwVisible = !pwVisible;
-  this.textContent = pwVisible ? 'Ocultar contraseñas' : 'Mostrar contraseñas';
-  renderSysTable();
-  renderEqTable();
-};
 
 
 let usuarios = [];
@@ -2347,7 +2225,6 @@ document.getElementById('btnRespaldo').onclick = function(){
   hoja(usadas, [['empresa','Empresa'],['fabricante','Marca'],['equipo','Modelo'],['serie','Serie'],['procesador','Procesador'],['ram','RAM'],['disco','Disco'],['ultimoUsuario','Último usuario'],['procedencia','Procedencia'],['condicion','Condición'],['notas','Notas']], 'Laptops disponibles');
   hoja(usuarios, [['nombre','Nombre'],['apellido','Apellido'],['correo','Correo'],['empresa','Empresa'],['googleWorkspace','Google Workspace'],['dropbox','Dropbox']], 'Usuarios');
   hoja(licenses, [['nombre','Herramienta'],['proveedor','Proveedor'],['empresa','Empresa'],['asientos','Asientos'],['costo','Costo'],['frecuencia','Frecuencia'],['categoria','Categoría']], 'Licencias');
-  hoja(sistemas, [['empresa','Empresa'],['rubro','Rubro'],['detalle','Servicio'],['usuario','Usuario'],['password','Contraseña'],['link','Link']], 'Sistemas');
   hoja(lineas, [['grupo','Grupo'],['linea','Línea'],['cuenta','Cuenta'],['servicio','Asignada a (factura)'],[r=>lnNombre(lnUsuario(r)),'Usuario NexoIT'],
     [r=>{const u=lnUsuario(r); return u?u.correo||'':'';},'Correo'],[r=>lnEquipos(r).map(e=>(e.placa||e.serie||'')+' '+(e.equipo||'')).join('; '),'Equipo asignado'],
     ['celular','Celular'],['modelo','Modelo'],['precioActual','Precio actual'],['precioRenovacion','Precio renovación'],
@@ -2416,13 +2293,11 @@ async function init(){
   if(movs === null){ movs = []; }
   usuarios = await Storage.get('usuarios', null);
   if(usuarios === null){ usuarios = []; }
-  sistemas = await Storage.get('sistemas', null);
-  if(sistemas === null){ sistemas = []; }
   lineas = await Storage.get('lineas', null);
   if(lineas === null){ lineas = []; }
 
   actualizarMeta();
-  refreshLicUI(); refreshEqUI(); refreshLuUI(); refreshMovUI(); refreshUserUI(); refreshSysUI(); refreshLnUI();
+  refreshLicUI(); refreshEqUI(); refreshLuUI(); refreshMovUI(); refreshUserUI(); refreshLnUI();
   if(!window.__revFirmas){ window.__revFirmas = setInterval(()=>revisarFirmas(true), 10*60*1000); setTimeout(()=>revisarFirmas(true), 2500); }
   if(readOnly){ setSync('off'); toast('⚠ No hay conexión con la base de datos: los cambios no se guardarán'); }
   else setSync('ok','● Conectado a la nube');
