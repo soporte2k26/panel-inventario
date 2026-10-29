@@ -418,14 +418,19 @@
   try {
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     window.__sb = sb;
+    // Cada pestaña recuerda la versión que se cargó; al guardar se comprueba que nadie la haya cambiado
+    window.__ver = {};
     window.__sbGet = async (key) => {
-      const { data, error } = await sb.from('nexoit').select('value').eq('key', key).maybeSingle();
+      const { data, error } = await sb.from('nexoit').select('value,version').eq('key', key).maybeSingle();
       if (error) throw error;
+      window.__ver[key] = data ? data.version : 0;
       return data ? data.value : null;
     };
     window.__sbSet = async (key, value) => {
-      const { error } = await sb.from('nexoit').upsert({ key, value, updated_at: new Date().toISOString() });
+      const { data, error } = await sb.rpc('nexoit_guardar', { p_key: key, p_value: value, p_version: window.__ver[key] || 0 });
       if (error) throw error;
+      if (!data || !data.ok) { const e = new Error('Otra persona guardó cambios en esta pestaña'); e.conflicto = true; e.key = key; throw e; }
+      window.__ver[key] = data.version;
     };
     window.__supabaseReady = true;
   } catch (e) {
@@ -471,11 +476,40 @@ const Storage = {
       if(['usuarios','equipos','lineas'].includes(key) && typeof recargarEnlaces==='function') recargarEnlaces();
       return true;
     }catch(e){
-      console.error('Supabase set failed', e); setSync('err');
+      console.error('Supabase set failed', e); setSync('err', e.conflicto ? '● Cambio sin guardar' : undefined);
+      if(e.conflicto){ avisoConflicto(key); return false; }
       toast('⚠ Error al guardar: ' + (e.message||e)); return false;
     }
   }
 };
+/* ---------- Evitar que se pisen los cambios entre personas ---------- */
+const NOMBRE_PESTANA = { equipos:'Equipos activos', laptops_usadas:'Laptops libres', movimientos:'Entradas y salidas', usuarios:'Usuarios', licencias:'Licencias', lineas:'Líneas' };
+function avisoConflicto(key){
+  const box = document.getElementById('modalBox'); box.classList.remove('ancho');
+  box.innerHTML = `<h3>⚠ Tu cambio no se guardó</h3>
+    <p style="line-height:1.5;">Otra persona guardó cambios en <b>${esc(NOMBRE_PESTANA[key]||key)}</b> mientras trabajabas. Para no borrar lo que hizo, tu último cambio <b>no se guardó</b>.</p>
+    <p style="line-height:1.5;">Recarga para ver la información más reciente y vuelve a hacer tu cambio.</p>
+    <div class="modal-actions"><button class="secondary" onclick="closeModal(true)">Cerrar</button><button onclick="location.reload()">Recargar ahora</button></div>`;
+  showModal();
+}
+function bannerCambios(keys){
+  let b = document.getElementById('bannerCambios');
+  if(!keys.length){ if(b) b.remove(); return; }
+  if(!b){ b = document.createElement('div'); b.id = 'bannerCambios';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:90;background:#B98625;color:#fff;padding:9px 14px;text-align:center;font-family:var(--sans,Arial),sans-serif;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,.25);';
+    document.body.appendChild(b); }
+  b.innerHTML = `Otra persona guardó cambios en <b>${keys.map(k=>esc(NOMBRE_PESTANA[k]||k)).join(', ')}</b>. Recarga antes de editar para no trabajar con datos viejos. <button onclick="location.reload()" style="margin-left:8px;padding:3px 10px;background:#fff;color:#22303A;border:none;cursor:pointer;font-weight:bold;">Recargar</button>`;
+}
+async function revisarCambiosAjenos(){
+  if(!window.__dentro || !window.__sb || document.hidden) return;
+  try{
+    const { data } = await window.__sb.rpc('nexoit_versiones');
+    if(!data) return;
+    bannerCambios(Object.keys(window.__ver).filter(k => window.__ver[k] && data[k] && data[k] !== window.__ver[k]));
+  }catch(e){}
+}
+setInterval(revisarCambiosAjenos, 45000);
+document.addEventListener('visibilitychange', revisarCambiosAjenos);
 
 function limpiarTexto(s){
   if(typeof s !== 'string') return s;
