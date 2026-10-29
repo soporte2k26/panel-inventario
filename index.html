@@ -167,6 +167,7 @@
   @media (max-width:640px){ .grid2{grid-template-columns:1fr;} }
   .checks{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;margin-bottom:12px;}
   .checks label{display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-family:inherit;font-size:13px;color:var(--ink);}
+  tr.rev-fila:hover td{background:var(--amber-dim,#F1E4C4);}
   .firma-box{border:1px dashed var(--ink-soft);background:#fff;height:120px;position:relative;touch-action:none;}
   .firma-box canvas{width:100%;height:100%;display:block;cursor:crosshair;}
   .firma-box button{position:absolute;right:4px;top:4px;padding:2px 8px;font-size:11px;}
@@ -482,7 +483,7 @@ const Storage = {
       await window.__sbSet(key, value);
       setSync('ok', '● Guardado ' + new Date().toLocaleTimeString('es-PA',{hour:'2-digit',minute:'2-digit'}));
       if(['usuarios','equipos','lineas'].includes(key) && typeof recargarEnlaces==='function') recargarEnlaces();
-      if(typeof renderRevision==='function') setTimeout(renderRevision, 0);
+      if(typeof renderRevision==='function'){ window.__revTrasGuardar = true; setTimeout(renderRevision, 0); }
       return true;
     }catch(e){
       console.error('Supabase set failed', e); setSync('err', e.conflicto ? '● Cambio sin guardar' : undefined);
@@ -1378,12 +1379,14 @@ const normSerie = s => String(s||'').toUpperCase().replace(/\s+/g,'');
 const SERIE_VACIA = new Set(['','N/A','NA','-','—','SINSERIE','S/N','SN']);
 const normNombre = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
 function revisionDatos(){
+  // Cada fila: { c: celdas, ir: función para abrir el registro, id, k: clave única, txt: descripción corta }
+  const F = (seccion, c, ir, id, txt) => ({ c, ir, id, k: seccion + ':' + ir + ':' + id, txt });
   const sec = [];
   // 1) Series repetidas (Equipos activos y Laptops libres)
   const mapa = {};
   const add = (s, fila) => { const k = normSerie(s); if(SERIE_VACIA.has(k)) return; (mapa[k] = mapa[k] || []).push(fila); };
-  equipo.forEach(e=>add(e.serie, [e.serie, 'Equipos activos', e.usuario || '—', [e.fabricante, e.equipo].filter(Boolean).join(' ') || e.tipo || '']));
-  usadas.forEach(e=>add(e.serie, [e.serie, 'Laptops libres', e.ultimoUsuario ? `Libre (antes: ${e.ultimoUsuario})` : 'Libre', [e.fabricante, e.equipo].filter(Boolean).join(' ')]));
+  equipo.forEach(e=>add(e.serie, F('series', [e.serie, 'Equipos activos', e.usuario || '—', [e.fabricante, e.equipo].filter(Boolean).join(' ') || e.tipo || ''], 'editEq', e.id, `Serie ${e.serie} repetida (${e.usuario||'equipo'})`)));
+  usadas.forEach(e=>add(e.serie, F('series', [e.serie, 'Laptops libres', e.ultimoUsuario ? `Libre (antes: ${e.ultimoUsuario})` : 'Libre', [e.fabricante, e.equipo].filter(Boolean).join(' ')], 'editLu', e.id, `Serie ${e.serie} repetida (laptop libre)`)));
   sec.push({ id:'series', titulo:'Series repetidas', ayuda:'El mismo número de serie está en más de un registro. Casi siempre es un registro viejo que hay que borrar o pasar a Laptops libres.',
     cols:['Serie','Dónde está','Asignado a','Equipo'], filas: Object.values(mapa).filter(v=>v.length>1).flat() });
   // 2) Personas con salida registrada que todavía tienen algo asignado
@@ -1397,48 +1400,87 @@ function revisionDatos(){
     if(lns.length) q.push('Línea: ' + lns.map(l=>l.linea).join(', '));
     if(u && u.dropbox==='Sí') q.push('Dropbox activo');
     if(u && u.googleWorkspace && !/sin licencia/i.test(u.gmailPlan||'')) q.push('Cuenta Google (' + u.googleWorkspace + ')');
-    if(q.length) pend.push([m.colaborador, fechaCorta(m.ultimoDia || m.fecha), m.numero || '', q.join(' · ')]);
+    if(!q.length) return;
+    const [ir, id] = u ? ['editUser', u.id] : eqs.length ? ['editEq', eqs[0].id] : ['editLn', lns[0].id];
+    pend.push(F('salidas', [m.colaborador, fechaCorta(m.ultimoDia || m.fecha), m.numero || '', q.join(' · ')], ir, id, `${m.colaborador} ya salió y tiene pendientes`));
   });
   sec.push({ id:'salidas', titulo:'Personas que ya salieron con cosas pendientes', ayuda:'Tienen acta de salida, pero en NexoIT todavía aparecen con equipo, línea o licencias. Revisa si falta devolver algo o quitar la licencia.',
     cols:['Colaborador','Salida','Acta','Pendiente'], filas: pend });
   // 3) Licencias que no cuadran
   const lic = [];
-  const asientos = (prov, emp) => licenses.filter(l=>new RegExp(prov,'i').test(l.proveedor||'') && (!emp || emp.includes(l.empresa))).reduce((a,l)=>a+(Number(l.asientos)||0),0);
-  const dbxU = usuarios.filter(u=>u.dropbox==='Sí').length, dbxL = asientos('dropbox');
-  if(dbxU !== dbxL) lic.push(['Dropbox (todas las empresas)', dbxL, dbxU, dbxU - dbxL]);
+  const delGrupo = (prov, emp) => licenses.filter(l=>new RegExp(prov,'i').test(l.proveedor||'') && (!emp || emp.includes(l.empresa)));
+  const suma = arr => arr.reduce((a,l)=>a+(Number(l.asientos)||0),0);
+  const dbxLic = delGrupo('dropbox'), dbxU = usuarios.filter(u=>u.dropbox==='Sí').length, dbxL = suma(dbxLic);
+  if(dbxU !== dbxL && dbxLic.length) lic.push(F('licencias', ['Dropbox (todas las empresas)', dbxL, dbxU, dbxU - dbxL], 'editLic', dbxLic[0].id, 'Licencias de Dropbox no cuadran'));
   [['Haus',['Haus'],['Haus']], ['Semah Group (SG. Investment + Semah Properties)',['SG. Investment','Semah Properties'],['Semah','SG. Investment','Semah Properties']],
    ['Colinas',['Colinas'],['Colinas']], ['Almacenajes',['Almacenajes'],['Almacenajes']]].forEach(([nom, empL, gw])=>{
-    const l = asientos('google', empL), u = usuarios.filter(x=>gw.includes(x.googleWorkspace) && !/sin licencia/i.test(x.gmailPlan||'')).length;
-    if(l && l !== u) lic.push(['Google Workspace · ' + nom, l, u, u - l]);
+    const ls = delGrupo('google', empL), l = suma(ls), u = usuarios.filter(x=>gw.includes(x.googleWorkspace) && !/sin licencia/i.test(x.gmailPlan||'')).length;
+    if(ls.length && l !== u) lic.push(F('licencias', ['Google Workspace · ' + nom, l, u, u - l], 'editLic', ls[0].id, `Licencias de Google de ${nom} no cuadran`));
   });
   sec.push({ id:'licencias', titulo:'Licencias que no cuadran', ayuda:'Compara las licencias registradas en la pestaña Licencias con los usuarios marcados en Usuarios. Una diferencia positiva significa que hay más usuarios marcados que licencias pagadas.',
     cols:['Licencia','Pagadas','Usuarios marcados','Diferencia'], filas: lic });
   // 4) Actas por firmar con más de 7 días
   const dias = iso => Math.floor((Date.now() - new Date(iso).getTime())/86400000);
-  sec.push({ id:'actas', titulo:'Actas sin firmar hace más de 7 días', ayuda:'Siguen “por firmar” en Dropbox. Usa “✍️ Firmar aquí” o “✓ Firmada” en Entradas y salidas.',
-    cols:['Acta','Colaborador','Registrada','Días'], filas: movs.filter(m=>m.pendienteFirma && m.registrado && dias(m.registrado) > 7).map(m=>[m.numero, m.colaborador, fechaCorta(m.registrado), dias(m.registrado)]) });
+  sec.push({ id:'actas', titulo:'Actas sin firmar hace más de 7 días', ayuda:'Siguen “por firmar” en Dropbox. Al abrirla puedes firmarla en pantalla.',
+    cols:['Acta','Colaborador','Registrada','Días'], filas: movs.filter(m=>m.pendienteFirma && m.registrado && dias(m.registrado) > 7)
+      .map(m=>F('actas', [m.numero, m.colaborador, fechaCorta(m.registrado), dias(m.registrado)], m.estadoDropbox==='Subido' ? 'firmarAqui' : 'irMovs', m.id, `Acta ${m.numero} sin firmar`)) });
   // 5) Equipos sin enlazar a un usuario
   sec.push({ id:'enlace', titulo:'Equipos con un nombre que no está en Usuarios', ayuda:'El nombre escrito en el equipo no coincide con nadie de la pestaña Usuarios. Los equipos compartidos y servidores no cuentan.',
-    cols:['Asignado a','Equipo','Serie','Empresa'], filas: equipo.filter(e=>!e.usuarioId && e.usuario && !e.compartido).map(e=>[e.usuario, [e.fabricante, e.equipo].filter(Boolean).join(' ') || e.tipo || '', e.serie || '', e.empresa || '']) });
+    cols:['Asignado a','Equipo','Serie','Empresa'], filas: equipo.filter(e=>!e.usuarioId && e.usuario && !e.compartido)
+      .map(e=>F('enlace', [e.usuario, [e.fabricante, e.equipo].filter(Boolean).join(' ') || e.tipo || '', e.serie || '', e.empresa || ''], 'editEq', e.id, `Equipo de ${e.usuario} sin enlazar`)) });
   // 6) Usuarios con correo vacío o repetido
   const cnt = {}; usuarios.forEach(u=>{ const c = (u.correo||'').trim().toLowerCase(); if(c) cnt[c] = (cnt[c]||0)+1; });
   sec.push({ id:'usuarios', titulo:'Usuarios sin correo o repetidos', ayuda:'Cada cuenta debería estar una sola vez. Las personas que solo tienen equipo o línea (sin cuenta de correo) están marcadas como “sin cuenta” y no aparecen aquí.',
     cols:['Nombre','Correo','Empresa','Problema'], filas: usuarios.filter(u=>(!(u.correo||'').trim() && !u.sinCorreo) || cnt[(u.correo||'').trim().toLowerCase()]>1)
-      .map(u=>[`${u.nombre||''} ${u.apellido||''}`.trim(), u.correo||'—', u.empresa||'', (u.correo||'').trim() ? 'Correo repetido' : 'Sin correo']) });
+      .map(u=>{ const n = `${u.nombre||''} ${u.apellido||''}`.trim(), p = (u.correo||'').trim() ? 'Correo repetido' : 'Sin correo';
+        return F('usuarios', [n, u.correo||'—', u.empresa||'', p], 'editUser', u.id, `${n}: ${p.toLowerCase()}`); }) });
   // 7) Líneas sin usuario
   sec.push({ id:'lineas', titulo:'Líneas sin usuario enlazado', ayuda:'Líneas activas que no están enlazadas a nadie de Usuarios (no incluye las compartidas ni las marcadas para cancelar o no renovar).',
-    cols:['Línea','Grupo','Asignada a (factura)','Acción'], filas: lineas.filter(l=>!lnUsuario(l) && !l.compartido && !/cancel|no renov/i.test(l.accion||'')).map(l=>[l.linea, l.grupo||'', l.servicio||l.usuarioNombre||'', l.accion||'']) });
+    cols:['Línea','Grupo','Asignada a (factura)','Acción'], filas: lineas.filter(l=>!lnUsuario(l) && !l.compartido && !/cancel|no renov/i.test(l.accion||''))
+      .map(l=>F('lineas', [l.linea, l.grupo||'', l.servicio||l.usuarioNombre||'', l.accion||''], 'editLn', l.id, `Línea ${l.linea} sin usuario`)) });
   return sec;
+}
+/* Ir directo al registro con el problema y avisar si al guardar se resolvió */
+window.irMovs = id => { document.querySelector('.tab[data-view="movs"]').click(); };
+window.irAProblema = (k) => {
+  const f = (window.__revActual || {})[k]; if(!f) return;
+  window.__revFoco = { k, txt: f.txt };
+  const fn = window[f.ir]; if(typeof fn === 'function') fn(f.id);
+};
+function avisoRevision(lineas, tipo){
+  let box = document.getElementById('avisoRev');
+  if(!box){ box = document.createElement('div'); box.id = 'avisoRev';
+    box.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:200;max-width:360px;display:flex;flex-direction:column;gap:8px;font-family:var(--sans,Arial),sans-serif;';
+    document.body.appendChild(box); }
+  const n = document.createElement('div');
+  const col = tipo==='ok' ? '#2F6E63' : tipo==='nuevo' ? '#B0512C' : '#B98625';
+  n.style.cssText = `background:#fff;border-left:5px solid ${col};box-shadow:0 3px 12px rgba(0,0,0,.25);padding:10px 12px;font-size:13px;line-height:1.4;color:#22303A;`;
+  n.innerHTML = lineas.map(esc).join('<br>') + `<div style="margin-top:6px;text-align:right;"><button class="secondary" style="font-size:11px;padding:3px 8px;" onclick="document.querySelector('.tab[data-view=revision]').click();this.closest('div').parentNode.remove();">Ver Revisión</button></div>`;
+  box.appendChild(n); setTimeout(()=>n.remove(), 9000);
 }
 function renderRevision(){
   if(!document.getElementById('revBody')) return;
   const sec = revisionDatos(), total = sec.reduce((a,x)=>a+x.filas.length,0);
+  const filas = {}; sec.forEach(x=>x.filas.forEach(f=>{ filas[f.k] = f; }));
+  // Avisos después de guardar: lo que se resolvió, lo que sigue y lo nuevo
+  const antes = window.__revBase, trasGuardar = window.__revTrasGuardar;
+  if(antes && trasGuardar){
+    window.__revTrasGuardar = false;
+    const resueltos = Object.keys(antes).filter(k=>!filas[k]), nuevos = Object.keys(filas).filter(k=>!antes[k]);
+    const foco = window.__revFoco;
+    if(resueltos.length) avisoRevision(['✓ Resuelto:', ...resueltos.slice(0,4).map(k=>antes[k].txt), resueltos.length>4 ? `y ${resueltos.length-4} más` : '', `Quedan ${total} en Revisión.`].filter(Boolean), 'ok');
+    if(foco && filas[foco.k] && !resueltos.length) avisoRevision(['⚠ Sigue pendiente:', foco.txt], 'pend');
+    if(nuevos.length) avisoRevision(['⚠ Nuevo en Revisión:', ...nuevos.slice(0,4).map(k=>filas[k].txt), nuevos.length>4 ? `y ${nuevos.length-4} más` : ''].filter(Boolean), 'nuevo');
+    if(foco && !filas[foco.k]) window.__revFoco = null;
+  }
+  window.__revActual = filas;
+  if(!antes || trasGuardar) window.__revBase = filas;   // la base solo cambia al guardar
   const badge = document.getElementById('revCount'); if(badge){ badge.textContent = total; badge.style.display = total ? '' : 'none'; }
   document.getElementById('revStats').innerHTML = sec.map(x=>`<div class="stat" style="cursor:pointer;" onclick="document.getElementById('rev-${x.id}').scrollIntoView({behavior:'smooth'})"><div class="num" style="${x.filas.length?'color:var(--rust)':''}">${x.filas.length}</div><div class="lbl">${esc(x.titulo)}</div></div>`).join('');
   document.getElementById('revBody').innerHTML = sec.map(x=>`
     <div id="rev-${x.id}" style="margin:18px 0 6px;"><h3 style="margin:0 0 4px;font-size:15px;">${x.filas.length ? '⚠' : '✓'} ${esc(x.titulo)} <span style="font-weight:normal;color:var(--ink-soft);">(${x.filas.length})</span></h3>
       <div style="font-size:12px;color:var(--ink-soft);margin-bottom:6px;">${esc(x.ayuda)}</div>
-      ${x.filas.length ? `<div class="table-scroll"><table style="font-size:12px;"><thead><tr>${x.cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${x.filas.map(f=>`<tr>${f.map(v=>`<td>${esc(String(v))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<div style="font-size:12px;color:var(--teal);">Todo en orden.</div>'}
+      ${x.filas.length ? `<div class="table-scroll"><table style="font-size:12px;"><thead><tr>${x.cols.map(c=>`<th>${esc(c)}</th>`).join('')}<th></th></tr></thead><tbody>${x.filas.map(f=>`<tr class="rev-fila" style="cursor:pointer;" title="Abrir y corregir" onclick="irAProblema('${esc(f.k)}')">${f.c.map(v=>`<td>${esc(String(v))}</td>`).join('')}<td style="white-space:nowrap;"><button class="secondary" style="font-size:11px;padding:3px 8px;">Corregir →</button></td></tr>`).join('')}</tbody></table></div>` : '<div style="font-size:12px;color:var(--teal);">Todo en orden.</div>'}
     </div>`).join('');
 }
 
