@@ -259,6 +259,7 @@
     <div class="tab" data-view="usadas">Laptops libres</div>
     <div class="tab" data-view="movs">Entradas y salidas</div>
     <div class="tab" data-view="usuarios">Usuarios</div>
+    <div class="tab" data-view="revision">Revisión <span id="revCount" style="display:none;background:var(--rust);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:3px;"></span></div>
   </div>
 
   <div class="panel">
@@ -394,6 +395,13 @@
       </div>
     </div>
 
+    <!-- REVISIÓN DE DATOS -->
+    <div id="view-revision" style="display:none;">
+      <div class="eq-resumen">Revisión automática de datos que suelen quedar mal: series repetidas, personas que ya salieron con cosas pendientes, licencias que no cuadran, actas sin firmar y registros sin enlazar. Se actualiza sola cada vez que guardas.</div>
+      <div class="stats" id="revStats"></div>
+      <div id="revBody"></div>
+    </div>
+
 
   </div>
 
@@ -474,6 +482,7 @@ const Storage = {
       await window.__sbSet(key, value);
       setSync('ok', '● Guardado ' + new Date().toLocaleTimeString('es-PA',{hour:'2-digit',minute:'2-digit'}));
       if(['usuarios','equipos','lineas'].includes(key) && typeof recargarEnlaces==='function') recargarEnlaces();
+      if(typeof renderRevision==='function') setTimeout(renderRevision, 0);
       return true;
     }catch(e){
       console.error('Supabase set failed', e); setSync('err', e.conflicto ? '● Cambio sin guardar' : undefined);
@@ -866,6 +875,8 @@ document.querySelectorAll('.tab').forEach(tab=>{
     document.getElementById('view-movs').style.display = view==='movs' ? '' : 'none';
     document.getElementById('view-usuarios').style.display = view==='usuarios' ? '' : 'none';
     document.getElementById('view-lineas').style.display = view==='lineas' ? '' : 'none';
+    document.getElementById('view-revision').style.display = view==='revision' ? '' : 'none';
+    if(view==='revision') renderRevision();
   });
 });
 
@@ -1355,12 +1366,82 @@ function renderMovTable(){
       <td class="row-actions">
         <button class="secondary" onclick="descargarActa('${m.id}')">PDF</button>
         ${m.estadoDropbox!=='Subido' ? `<button onclick="reintentarActa('${m.id}')">Subir</button>` : ''}
+        ${m.pendienteFirma && m.estadoDropbox==='Subido' ? `<button title="La persona firma en esta pantalla (iPad o computadora). El PDF firmado reemplaza al “por firmar” en Dropbox." onclick="firmarAqui('${m.id}')">✍️ Firmar aquí</button>` : ''}
         ${m.pendienteFirma && m.estadoDropbox==='Subido' ? `<button class="secondary" title="Corregir datos del acta antes de que la firmen. Reemplaza el mismo archivo en Dropbox." onclick="editarActa('${m.id}')">✏️ Editar</button>` : ''}
         ${m.pendienteFirma ? `<button class="secondary" title="Marcar como firmada y quitar “por firmar” del archivo" onclick="marcarFirmada('${m.id}')">✓ Firmada</button>` : ''}
       </td>
     </tr>`).join('');
 }
-function refreshMovUI(){ renderMovStats(); renderMovTable(); }
+function refreshMovUI(){ renderMovStats(); renderMovTable(); if(typeof renderRevision==='function') renderRevision(); }
+/* ---------- REVISIÓN DE DATOS ---------- */
+const normSerie = s => String(s||'').toUpperCase().replace(/\s+/g,'');
+const SERIE_VACIA = new Set(['','N/A','NA','-','—','SINSERIE','S/N','SN']);
+const normNombre = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+function revisionDatos(){
+  const sec = [];
+  // 1) Series repetidas (Equipos activos y Laptops libres)
+  const mapa = {};
+  const add = (s, fila) => { const k = normSerie(s); if(SERIE_VACIA.has(k)) return; (mapa[k] = mapa[k] || []).push(fila); };
+  equipo.forEach(e=>add(e.serie, [e.serie, 'Equipos activos', e.usuario || '—', [e.fabricante, e.equipo].filter(Boolean).join(' ') || e.tipo || '']));
+  usadas.forEach(e=>add(e.serie, [e.serie, 'Laptops libres', e.ultimoUsuario ? `Libre (antes: ${e.ultimoUsuario})` : 'Libre', [e.fabricante, e.equipo].filter(Boolean).join(' ')]));
+  sec.push({ id:'series', titulo:'Series repetidas', ayuda:'El mismo número de serie está en más de un registro. Casi siempre es un registro viejo que hay que borrar o pasar a Laptops libres.',
+    cols:['Serie','Dónde está','Asignado a','Equipo'], filas: Object.values(mapa).filter(v=>v.length>1).flat() });
+  // 2) Personas con salida registrada que todavía tienen algo asignado
+  const hoy = hoyISO(), pend = [];
+  movs.filter(m=>m.tipo==='Salida' && (m.ultimoDia || m.fecha || '') <= hoy).forEach(m=>{
+    const u = usuarios.find(x=>x.id===m.usuarioId) || usuarios.find(x=>normNombre(`${x.nombre} ${x.apellido}`)===normNombre(m.colaborador));
+    const eqs = equipo.filter(e=> (u && e.usuarioId===u.id) || (!e.usuarioId && normNombre(e.usuario)===normNombre(m.colaborador)));
+    const lns = lineas.filter(l=> u && l.usuarioId===u.id);
+    const q = [];
+    if(eqs.length) q.push('Equipo asignado: ' + eqs.map(e=>`${e.equipo||e.tipo||'equipo'} (${e.serie||'sin serie'})`).join('; '));
+    if(lns.length) q.push('Línea: ' + lns.map(l=>l.linea).join(', '));
+    if(u && u.dropbox==='Sí') q.push('Dropbox activo');
+    if(u && u.googleWorkspace && !/sin licencia/i.test(u.gmailPlan||'')) q.push('Cuenta Google (' + u.googleWorkspace + ')');
+    if(q.length) pend.push([m.colaborador, fechaCorta(m.ultimoDia || m.fecha), m.numero || '', q.join(' · ')]);
+  });
+  sec.push({ id:'salidas', titulo:'Personas que ya salieron con cosas pendientes', ayuda:'Tienen acta de salida, pero en NexoIT todavía aparecen con equipo, línea o licencias. Revisa si falta devolver algo o quitar la licencia.',
+    cols:['Colaborador','Salida','Acta','Pendiente'], filas: pend });
+  // 3) Licencias que no cuadran
+  const lic = [];
+  const asientos = (prov, emp) => licenses.filter(l=>new RegExp(prov,'i').test(l.proveedor||'') && (!emp || emp.includes(l.empresa))).reduce((a,l)=>a+(Number(l.asientos)||0),0);
+  const dbxU = usuarios.filter(u=>u.dropbox==='Sí').length, dbxL = asientos('dropbox');
+  if(dbxU !== dbxL) lic.push(['Dropbox (todas las empresas)', dbxL, dbxU, dbxU - dbxL]);
+  [['Haus',['Haus'],['Haus']], ['Semah Group (SG. Investment + Semah Properties)',['SG. Investment','Semah Properties'],['Semah','SG. Investment','Semah Properties']],
+   ['Colinas',['Colinas'],['Colinas']], ['Almacenajes',['Almacenajes'],['Almacenajes']]].forEach(([nom, empL, gw])=>{
+    const l = asientos('google', empL), u = usuarios.filter(x=>gw.includes(x.googleWorkspace) && !/sin licencia/i.test(x.gmailPlan||'')).length;
+    if(l && l !== u) lic.push(['Google Workspace · ' + nom, l, u, u - l]);
+  });
+  sec.push({ id:'licencias', titulo:'Licencias que no cuadran', ayuda:'Compara las licencias registradas en la pestaña Licencias con los usuarios marcados en Usuarios. Una diferencia positiva significa que hay más usuarios marcados que licencias pagadas.',
+    cols:['Licencia','Pagadas','Usuarios marcados','Diferencia'], filas: lic });
+  // 4) Actas por firmar con más de 7 días
+  const dias = iso => Math.floor((Date.now() - new Date(iso).getTime())/86400000);
+  sec.push({ id:'actas', titulo:'Actas sin firmar hace más de 7 días', ayuda:'Siguen “por firmar” en Dropbox. Usa “✍️ Firmar aquí” o “✓ Firmada” en Entradas y salidas.',
+    cols:['Acta','Colaborador','Registrada','Días'], filas: movs.filter(m=>m.pendienteFirma && m.registrado && dias(m.registrado) > 7).map(m=>[m.numero, m.colaborador, fechaCorta(m.registrado), dias(m.registrado)]) });
+  // 5) Equipos sin enlazar a un usuario
+  sec.push({ id:'enlace', titulo:'Equipos con un nombre que no está en Usuarios', ayuda:'El nombre escrito en el equipo no coincide con nadie de la pestaña Usuarios (puede ser ortografía, un usuario genérico o alguien que falta registrar).',
+    cols:['Asignado a','Equipo','Serie','Empresa'], filas: equipo.filter(e=>!e.usuarioId && e.usuario).map(e=>[e.usuario, [e.fabricante, e.equipo].filter(Boolean).join(' ') || e.tipo || '', e.serie || '', e.empresa || '']) });
+  // 6) Usuarios con correo vacío o repetido
+  const cnt = {}; usuarios.forEach(u=>{ const c = (u.correo||'').trim().toLowerCase(); if(c) cnt[c] = (cnt[c]||0)+1; });
+  sec.push({ id:'usuarios', titulo:'Usuarios sin correo o repetidos', ayuda:'Cada persona debería estar una sola vez y con su correo.',
+    cols:['Nombre','Correo','Empresa','Problema'], filas: usuarios.filter(u=>!(u.correo||'').trim() || cnt[(u.correo||'').trim().toLowerCase()]>1)
+      .map(u=>[`${u.nombre||''} ${u.apellido||''}`.trim(), u.correo||'—', u.empresa||'', (u.correo||'').trim() ? 'Correo repetido' : 'Sin correo']) });
+  // 7) Líneas sin usuario
+  sec.push({ id:'lineas', titulo:'Líneas sin usuario enlazado', ayuda:'Líneas activas que no están enlazadas a nadie de Usuarios (no incluye las marcadas para cancelar o no renovar).',
+    cols:['Línea','Grupo','Asignada a (factura)','Acción'], filas: lineas.filter(l=>!lnUsuario(l) && !/cancel|no renov/i.test(l.accion||'')).map(l=>[l.linea, l.grupo||'', l.servicio||l.usuarioNombre||'', l.accion||'']) });
+  return sec;
+}
+function renderRevision(){
+  if(!document.getElementById('revBody')) return;
+  const sec = revisionDatos(), total = sec.reduce((a,x)=>a+x.filas.length,0);
+  const badge = document.getElementById('revCount'); if(badge){ badge.textContent = total; badge.style.display = total ? '' : 'none'; }
+  document.getElementById('revStats').innerHTML = sec.map(x=>`<div class="stat" style="cursor:pointer;" onclick="document.getElementById('rev-${x.id}').scrollIntoView({behavior:'smooth'})"><div class="num" style="${x.filas.length?'color:var(--rust)':''}">${x.filas.length}</div><div class="lbl">${esc(x.titulo)}</div></div>`).join('');
+  document.getElementById('revBody').innerHTML = sec.map(x=>`
+    <div id="rev-${x.id}" style="margin:18px 0 6px;"><h3 style="margin:0 0 4px;font-size:15px;">${x.filas.length ? '⚠' : '✓'} ${esc(x.titulo)} <span style="font-weight:normal;color:var(--ink-soft);">(${x.filas.length})</span></h3>
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:6px;">${esc(x.ayuda)}</div>
+      ${x.filas.length ? `<div class="table-scroll"><table style="font-size:12px;"><thead><tr>${x.cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${x.filas.map(f=>`<tr>${f.map(v=>`<td>${esc(String(v))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<div style="font-size:12px;color:var(--teal);">Todo en orden.</div>'}
+    </div>`).join('');
+}
+
 
 function prepararFirma(id){
   const cv = document.getElementById(id), ctx = cv.getContext('2d');
@@ -1859,6 +1940,66 @@ window.marcarFirmada = async id => {
   }catch(e){ console.warn(e); toast('Se marcó firmada en NexoIT, pero no se pudo renombrar en Dropbox.'); }
   movs = movs.map(x=>x.id===id ? { ...x, ...act } : x);
   await Storage.set('movimientos', movs); refreshMovUI(); toast(`${m.numero} marcada como firmada ✓`);
+};
+/* --- Firmar aquí: la persona firma en pantalla (iPad) y el PDF firmado reemplaza al “por firmar” --- */
+window.firmarAqui = id => {
+  const m = movs.find(x=>x.id===id); if(!m) return;
+  if(!m.pendienteFirma){ alert('Esta acta ya está firmada.'); return; }
+  const ent = m.tipo==='Entrada';
+  const eqTxt = [m.laptop && (m.laptop.modelo || m.laptop.serie) ? `Laptop ${[m.laptop.marca, m.laptop.modelo].filter(Boolean).join(' ')} · serie ${m.laptop.serie||'—'}` : '',
+                 m.celular && (m.celular.modelo || m.celular.imei) ? `Celular ${m.celular.modelo||''} · IMEI ${m.celular.imei||'—'}` : '',
+                 m.sim ? `Línea ${m.sim}` : '', m.otroEquipo && m.otroEquipo.modelo ? `${m.otroEquipo.modelo} · serie ${m.otroEquipo.serie||'—'}` : ''].filter(Boolean);
+  const box = document.getElementById('modalBox'); box.classList.add('ancho');
+  box.innerHTML = `
+    <h3>Firmar acta ${esc(m.numero)}</h3>
+    <div class="eq-resumen" style="margin:0 0 8px;"><b>${esc(m.colaborador)}</b>${m.cargo ? ' · ' + esc(m.cargo) : ''}${m.empresa ? ' · ' + esc(m.empresa) : ''}<br>
+      ${ent ? 'Recibe' : 'Entrega'}: ${eqTxt.length ? eqTxt.map(esc).join('<br>') : 'ver el acta'}</div>
+    <div style="margin:0 0 10px;"><button class="secondary" onclick="vistaFirma('${m.id}')">📄 Ver el acta completa antes de firmar</button></div>
+    <div style="font-size:12px;line-height:1.5;margin-bottom:8px;">Al firmar, ${ent ? 'el colaborador declara que recibe' : 'el colaborador declara que entrega'} los equipos indicados y acepta los términos de uso del acta.</div>
+    <div class="grid2">
+      <div><div class="firma-box" style="height:170px;"><canvas id="firmaCol"></canvas><button class="secondary" onclick="borrarFirma('firmaCol')">Borrar</button></div><div style="font-size:12px;text-align:center;margin-top:4px;">Firma de <b>${esc(m.colaborador)}</b></div></div>
+      <div><div class="firma-box" style="height:170px;"><canvas id="firmaIT"></canvas><button class="secondary" onclick="borrarFirma('firmaIT')">Borrar</button></div><div style="font-size:12px;text-align:center;margin-top:4px;">Firma de IT que ${ent?'entrega':'recibe'}</div></div>
+    </div>
+    <div class="grid2" style="margin-top:8px;">${fIn('f_it', ent?'Nombre de IT que entrega':'Nombre de IT que recibe','text',m.itNombre||'')}<div></div></div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancelar</button>
+      <button id="btnFirmar" onclick="guardarFirma('${m.id}')">Firmar y guardar en Dropbox</button>
+    </div>`;
+  showModal();
+  prepararFirma('firmaCol'); prepararFirma('firmaIT');
+  if(m.firmaIT){ const cv = document.getElementById('firmaIT'), img = new Image(); img.onload = ()=>{ const r = cv.getBoundingClientRect(); cv.getContext('2d').drawImage(img, 0, 0, r.width, r.height); cv.dataset.vacia = '0'; }; img.src = m.firmaIT; }
+};
+function actaFirmada(m){
+  const col = document.getElementById('firmaCol'), it = document.getElementById('firmaIT');
+  return { ...m, itNombre: gV('f_it') || m.itNombre || '',
+    firmaCol: col.dataset.vacia==='1' ? '' : col.toDataURL('image/png'),
+    firmaIT: it.dataset.vacia==='1' ? (m.firmaIT||'') : it.toDataURL('image/png') };
+}
+window.vistaFirma = id => { const m = movs.find(x=>x.id===id); if(!m) return; window.open(generarActaPDF({ ...m, pendienteFirma:false }).output('bloburl'), '_blank'); };
+window.guardarFirma = async id => {
+  const m = movs.find(x=>x.id===id); if(!m) return;
+  const n = actaFirmada(m);
+  if(!n.firmaCol){ alert('Falta la firma de ' + m.colaborador + '.'); return; }
+  if(!n.firmaIT){ alert('Falta la firma de IT.'); return; }
+  const btn = document.getElementById('btnFirmar'); btn.disabled = true; btn.textContent = 'Guardando en Dropbox…';
+  try{
+    const f = await dbx({ accion:'estado', id: m.dropboxId, path: m.dropboxPath, numero: m.numero, nombre: m.colaborador, desde: m.registrado });
+    if(!f || !f.encontrado) throw new Error('No encontré el archivo del acta en Dropbox.');
+    if(!/por firmar/i.test(f.name)) throw new Error('El archivo en Dropbox ya no dice “por firmar”; puede que ya esté firmado.');
+    n.pendienteFirma = false; n.firmadoEn = hoyISO(); n.firmadoComo = 'En persona (NexoIT)';
+    const b64 = generarActaPDF(n).output('datauristring').split(',')[1];
+    const r = await dbx({ accion:'reemplazar', id: f.id, carpeta: MOV_CARPETA[claseActa(n)], nombre: nombreActa(n), pdfBase64: b64 });
+    if(!r || !r.ok) throw new Error((r && r.error) || 'Dropbox no aceptó el archivo firmado.');
+    n.dropboxId = r.id; n.dropboxPath = r.path; n.dropboxHash = r.content_hash || ''; n.dropboxSize = r.size || 0; n.estadoDropbox = 'Subido';
+    movs = movs.map(x=>x.id===id ? n : x);
+    if(!await Storage.set('movimientos', movs)) throw new Error('El PDF firmado ya está en Dropbox, pero no se pudo guardar en NexoIT. Usa “✓ Firmada”.');
+    registrarAcceso('Acta firmada en persona', n.numero + ' · ' + n.colaborador);
+    closeModal(true); refreshMovUI(); toast(`${n.numero} firmada ✓ Guardada como ${r.name}`);
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Firmar y guardar en Dropbox';
+    let msg = e && e.message || 'Error'; try{ const j = JSON.parse(msg); msg = j.error || msg; }catch(_){}
+    alert('No se pudo guardar la firma: ' + msg);
+  }
 };
 /* --- Corregir un acta "por firmar": reemplaza el mismo archivo en Dropbox --- */
 window.editarActa = id => {
