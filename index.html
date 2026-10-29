@@ -1418,16 +1418,16 @@ function revisionDatos(){
   sec.push({ id:'actas', titulo:'Actas sin firmar hace más de 7 días', ayuda:'Siguen “por firmar” en Dropbox. Usa “✍️ Firmar aquí” o “✓ Firmada” en Entradas y salidas.',
     cols:['Acta','Colaborador','Registrada','Días'], filas: movs.filter(m=>m.pendienteFirma && m.registrado && dias(m.registrado) > 7).map(m=>[m.numero, m.colaborador, fechaCorta(m.registrado), dias(m.registrado)]) });
   // 5) Equipos sin enlazar a un usuario
-  sec.push({ id:'enlace', titulo:'Equipos con un nombre que no está en Usuarios', ayuda:'El nombre escrito en el equipo no coincide con nadie de la pestaña Usuarios (puede ser ortografía, un usuario genérico o alguien que falta registrar).',
-    cols:['Asignado a','Equipo','Serie','Empresa'], filas: equipo.filter(e=>!e.usuarioId && e.usuario).map(e=>[e.usuario, [e.fabricante, e.equipo].filter(Boolean).join(' ') || e.tipo || '', e.serie || '', e.empresa || '']) });
+  sec.push({ id:'enlace', titulo:'Equipos con un nombre que no está en Usuarios', ayuda:'El nombre escrito en el equipo no coincide con nadie de la pestaña Usuarios. Los equipos compartidos y servidores no cuentan.',
+    cols:['Asignado a','Equipo','Serie','Empresa'], filas: equipo.filter(e=>!e.usuarioId && e.usuario && !e.compartido).map(e=>[e.usuario, [e.fabricante, e.equipo].filter(Boolean).join(' ') || e.tipo || '', e.serie || '', e.empresa || '']) });
   // 6) Usuarios con correo vacío o repetido
   const cnt = {}; usuarios.forEach(u=>{ const c = (u.correo||'').trim().toLowerCase(); if(c) cnt[c] = (cnt[c]||0)+1; });
-  sec.push({ id:'usuarios', titulo:'Usuarios sin correo o repetidos', ayuda:'Cada persona debería estar una sola vez y con su correo.',
-    cols:['Nombre','Correo','Empresa','Problema'], filas: usuarios.filter(u=>!(u.correo||'').trim() || cnt[(u.correo||'').trim().toLowerCase()]>1)
+  sec.push({ id:'usuarios', titulo:'Usuarios sin correo o repetidos', ayuda:'Cada cuenta debería estar una sola vez. Las personas que solo tienen equipo o línea (sin cuenta de correo) están marcadas como “sin cuenta” y no aparecen aquí.',
+    cols:['Nombre','Correo','Empresa','Problema'], filas: usuarios.filter(u=>(!(u.correo||'').trim() && !u.sinCorreo) || cnt[(u.correo||'').trim().toLowerCase()]>1)
       .map(u=>[`${u.nombre||''} ${u.apellido||''}`.trim(), u.correo||'—', u.empresa||'', (u.correo||'').trim() ? 'Correo repetido' : 'Sin correo']) });
   // 7) Líneas sin usuario
-  sec.push({ id:'lineas', titulo:'Líneas sin usuario enlazado', ayuda:'Líneas activas que no están enlazadas a nadie de Usuarios (no incluye las marcadas para cancelar o no renovar).',
-    cols:['Línea','Grupo','Asignada a (factura)','Acción'], filas: lineas.filter(l=>!lnUsuario(l) && !/cancel|no renov/i.test(l.accion||'')).map(l=>[l.linea, l.grupo||'', l.servicio||l.usuarioNombre||'', l.accion||'']) });
+  sec.push({ id:'lineas', titulo:'Líneas sin usuario enlazado', ayuda:'Líneas activas que no están enlazadas a nadie de Usuarios (no incluye las compartidas ni las marcadas para cancelar o no renovar).',
+    cols:['Línea','Grupo','Asignada a (factura)','Acción'], filas: lineas.filter(l=>!lnUsuario(l) && !l.compartido && !/cancel|no renov/i.test(l.accion||'')).map(l=>[l.linea, l.grupo||'', l.servicio||l.usuarioNombre||'', l.accion||'']) });
   return sec;
 }
 function renderRevision(){
