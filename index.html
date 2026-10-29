@@ -1431,7 +1431,7 @@ function revisionDatos(){
   // 6) Usuarios con correo vacío o repetido
   const cnt = {}; usuarios.forEach(u=>{ const c = (u.correo||'').trim().toLowerCase(); if(c) cnt[c] = (cnt[c]||0)+1; });
   sec.push({ id:'usuarios', titulo:'Usuarios sin correo o repetidos', ayuda:'Cada cuenta debería estar una sola vez. Las personas que solo tienen equipo o línea (sin cuenta de correo) están marcadas como “sin cuenta” y no aparecen aquí.',
-    cols:['Nombre','Correo','Empresa','Problema'], filas: usuarios.filter(u=>(!(u.correo||'').trim() && !u.sinCorreo) || cnt[(u.correo||'').trim().toLowerCase()]>1)
+    cols:['Nombre','Correo','Empresa','Problema'], filas: usuarios.filter(u=>(!(u.correo||'').trim() && !u.sinCorreo) || (cnt[(u.correo||'').trim().toLowerCase()]>1 && !u.cuentaCompartida))
       .map(u=>{ const n = `${u.nombre||''} ${u.apellido||''}`.trim(), p = (u.correo||'').trim() ? 'Correo repetido' : 'Sin correo';
         return F('usuarios', [n, u.correo||'—', u.empresa||'', p], 'editUser', u.id, `${n}: ${p.toLowerCase()}`); }) });
   // 7) Líneas sin usuario
@@ -2381,7 +2381,8 @@ function openUserModal(existing){
     <h3>${isEdit?'Editar':'Nuevo'} usuario</h3>
     <div class="field"><label>Nombre</label><input id="u_nombre" type="text" value="${esc(u.nombre)}"></div>
     <div class="field"><label>Apellido</label><input id="u_apellido" type="text" value="${esc(u.apellido)}"></div>
-    <div class="field"><label>Correo</label><input id="u_correo" type="text" value="${esc(u.correo)}"></div>
+    <div class="field"><label>Correo</label><input id="u_correo" type="text" value="${esc(u.correo)}" autocomplete="off"></div>
+    <div id="u_conflicto"></div>
     <div class="field"><label>Empresa</label><select id="u_empresa">${opcionesEmpresa(u.empresa)}</select></div>
     <div class="field"><label>Licencia Gmail (Google Workspace)</label><select id="u_gw"><option value="">No</option><option value="Sí" ${tieneGmail(u)?'selected':''}>Sí</option></select></div>
     <div class="field"><label>Plan Gmail</label><input id="u_plan" type="text" list="dl_planes" value="${esc(u.gmailPlan||'')}" placeholder="Business Starter, Business Standard…"></div>
@@ -2392,7 +2393,82 @@ function openUserModal(existing){
       <button onclick="saveUser('${u.id}', ${isEdit})">Guardar</button>
     </div>`;
   showModal();
+  const inp = document.getElementById('u_correo'); let t = null;
+  inp.addEventListener('input', ()=>{ clearTimeout(t); t = setTimeout(()=>revisarCorreoUsuario(u.id), 300); });
+  revisarCorreoUsuario(u.id, true);
 }
+/* ---------- Correo que ya tiene otra persona: reemplazar (con su línea y equipo) o compartir ---------- */
+const nomUsuario = u => `${u.nombre||''} ${u.apellido||''}`.replace(/\s+/g,' ').trim();
+function cosasDeUsuario(u){
+  const n = normNombre(nomUsuario(u));
+  return { eqs: equipo.filter(e=>e.usuarioId===u.id || (!e.usuarioId && n && normNombre(e.usuario)===n)),
+           lns: lineas.filter(l=>l.usuarioId===u.id) };
+}
+function duenoCorreo(correo, selfId){
+  const c = String(correo||'').trim().toLowerCase(); if(!c) return null;
+  return usuarios.find(x=>x.id!==selfId && String(x.correo||'').trim().toLowerCase()===c) || null;
+}
+window.revisarCorreoUsuario = (selfId, inicial) => {
+  const box = document.getElementById('u_conflicto'); if(!box) return;
+  const o = duenoCorreo(document.getElementById('u_correo').value, selfId);
+  if(!o){ box.innerHTML = ''; box.dataset.otro = ''; return; }
+  const yo = usuarios.find(x=>x.id===selfId);
+  if(inicial && yo && yo.cuentaCompartida && o.cuentaCompartida){ box.innerHTML = `<div class="eq-resumen" style="margin:0 0 8px;">Cuenta compartida con <b>${esc(nomUsuario(o))}</b>.</div>`; box.dataset.otro = ''; return; }
+  const { eqs, lns } = cosasDeUsuario(o);
+  const lic = [tieneGmail(o) ? 'Gmail' + (o.gmailPlan ? ' (' + o.gmailPlan + ')' : '') : '', tieneDropbox(o) ? 'Dropbox' : ''].filter(Boolean).join(' · ') || 'sin licencias';
+  box.dataset.otro = o.id;
+  box.innerHTML = `<div style="border:1px solid var(--rust);background:#FBEDE6;padding:10px;margin:0 0 10px;font-size:12.5px;line-height:1.5;">
+    <b>⚠ Este correo ya existe.</b> Lo tiene <b>${esc(nomUsuario(o))}</b> (${esc(o.empresa||'sin empresa')}) · ${esc(lic)}${lns.length ? ' · Línea ' + lns.map(l=>esc(l.linea)).join(', ') : ''}${eqs.length ? ' · ' + eqs.length + ' equipo(s)' : ''}.
+    <div class="checks" style="margin-top:6px;flex-direction:column;align-items:flex-start;">
+      <label><input type="radio" name="u_accion" value="reemplazar" checked> <b>Reemplazar:</b> la cuenta pasa a esta persona (con sus licencias)</label>
+      <label><input type="radio" name="u_accion" value="compartir"> <b>Mantener a los dos</b> con este correo (cuenta compartida)</label>
+    </div>
+    <div id="u_pasar" style="margin-top:6px;">
+      ${lns.length || eqs.length ? '<div style="font-weight:600;margin-bottom:2px;">También pasar a esta persona:</div>' : ''}
+      ${lns.map(l=>`<label style="display:block;"><input type="checkbox" class="u_pasa_ln" value="${esc(l.id)}" checked> Línea ${esc(l.linea)}${l.modelo ? ' · ' + esc(l.modelo) : ''}</label>`).join('')}
+      ${eqs.map(e=>`<label style="display:block;"><input type="checkbox" class="u_pasa_eq" value="${esc(e.id)}" checked> ${esc([e.tipo, e.fabricante, e.equipo].filter(Boolean).join(' '))} · serie ${esc(e.serie||'—')}</label>`).join('')}
+      <div style="color:var(--ink-soft);margin-top:4px;">Lo que desmarques se queda con ${esc(nomUsuario(o))} (como persona sin cuenta). Las actas anteriores no cambian: son historial.</div>
+    </div></div>`;
+  const pasar = document.getElementById('u_pasar');
+  box.querySelectorAll('input[name="u_accion"]').forEach(r=>r.addEventListener('change', ()=>{ pasar.style.display = gRad('u_accion')==='reemplazar' ? '' : 'none'; }));
+  // Si esta persona aún no tiene licencias marcadas, toma las de la cuenta
+  if(!document.getElementById('u_gw').value && tieneGmail(o)){ document.getElementById('u_gw').value = 'Sí'; if(!gV('u_plan')) document.getElementById('u_plan').value = o.gmailPlan || ''; }
+  if(!document.getElementById('u_db').value && tieneDropbox(o)) document.getElementById('u_db').value = 'Sí';
+};
+async function reasignarCuenta(o, data, actualId, existeActual){
+  const nuevo = data, viejoNom = nomUsuario(o), nuevoNom = nomUsuario(nuevo);
+  const pasaLn = new Set(gChk('u_pasa_ln')), pasaEq = new Set(gChk('u_pasa_eq'));
+  const { eqs, lns } = cosasDeUsuario(o);
+  const quedan = eqs.some(e=>!pasaEq.has(e.id)) || lns.some(l=>!pasaLn.has(l.id));
+  // Si algo se queda con la persona anterior, sigue existiendo como "sin cuenta"
+  const anterior = quedan ? { id: uid('u'), nombre: o.nombre, apellido: o.apellido, correo: '', empresa: o.empresa, googleWorkspace: '', gmailPlan: '', dropbox: '', sinCorreo: true,
+    origen: `Cuenta ${o.correo} pasada a ${nuevoNom} el ${fechaCorta(hoyISO())}` } : null;
+  // La cuenta conserva su id (así sus licencias y enlaces siguen) y toma los datos de la nueva persona
+  const cuenta = { ...o, ...nuevo, id: o.id, cuentaCompartida: false, sinCorreo: false, anteriorTitular: viejoNom };
+  usuarios = usuarios.filter(u=>u.id!==actualId || actualId===o.id).map(u=>u.id===o.id ? cuenta : u);
+  if(anterior) usuarios.push(anterior);
+  equipo = equipo.map(e=>{
+    if(eqs.some(x=>x.id===e.id)) return pasaEq.has(e.id) ? { ...e, usuarioId: o.id, usuario: nuevoNom } : { ...e, usuarioId: anterior.id };
+    if(existeActual && e.usuarioId===actualId) return { ...e, usuarioId: o.id, usuario: nuevoNom };
+    return e;
+  });
+  lineas = lineas.map(l=>{
+    if(lns.some(x=>x.id===l.id)) return pasaLn.has(l.id) ? { ...l, usuarioId: o.id, usuarioNombre: nuevoNom, usuarioEmpresa: nuevo.empresa || l.usuarioEmpresa, anteriorUsuario: viejoNom, mapeo:'Confirmado' } : { ...l, usuarioId: anterior.id };
+    if(existeActual && l.usuarioId===actualId) return { ...l, usuarioId: o.id, usuarioNombre: nuevoNom };
+    return l;
+  });
+  // Actas: las de la persona anterior quedan como historial con su nombre; las de esta persona apuntan a la cuenta
+  let movCambio = false;
+  movs = movs.map(m=>{
+    if(m.usuarioId===o.id){ movCambio = true; return anterior ? { ...m, usuarioId: anterior.id } : (({usuarioId, ...r})=>({ ...r, cuentaReasignada: `Cuenta ${o.correo} pasada a ${nuevoNom}` }))(m); }
+    if(existeActual && actualId!==o.id && m.usuarioId===actualId){ movCambio = true; return { ...m, usuarioId: o.id }; }
+    return m;
+  });
+  const ok = await Storage.set('usuarios', usuarios) && await Storage.set('equipos', equipo) && await Storage.set('lineas', lineas) && (!movCambio || await Storage.set('movimientos', movs));
+  registrarAcceso('Cuenta reasignada', `${o.correo}: ${viejoNom} → ${nuevoNom}`);
+  return ok;
+}
+
 window.saveUser = async function(id, isEdit){
   const previo = usuarios.find(u=>u.id===id) || {};
   const empresa = document.getElementById('u_empresa').value;
@@ -2401,7 +2477,7 @@ window.saveUser = async function(id, isEdit){
     id,
     nombre: document.getElementById('u_nombre').value.trim(),
     apellido: document.getElementById('u_apellido').value.trim(),
-    correo: document.getElementById('u_correo').value.trim(),
+    correo: document.getElementById('u_correo').value.trim().toLowerCase(),
     empresa,
     googleWorkspace: gw ? (tieneGmail(previo) ? previo.googleWorkspace : (empresa || 'Sí')) : '',
     gmailPlan: gw ? document.getElementById('u_plan').value.trim() : '',
@@ -2409,6 +2485,20 @@ window.saveUser = async function(id, isEdit){
   };
   if(!data.nombre){ alert('El nombre es obligatorio'); return; }
   if(!data.empresa){ alert('Elige la empresa'); return; }
+  if(data.correo) data.sinCorreo = false;
+  const otro = duenoCorreo(data.correo, id);
+  if(otro){
+    const accion = gRad('u_accion');
+    if(!accion){ revisarCorreoUsuario(id); return; }
+    if(accion==='reemplazar'){
+      if(!confirm(`La cuenta ${data.correo} pasará de ${nomUsuario(otro)} a ${nomUsuario(data)}, con lo que marcaste. ¿Continuar?`)) return;
+      const ok = await reasignarCuenta(otro, data, id, isEdit);
+      closeModal(true); refreshUserUI(); refreshEqUI(); refreshLnUI(); refreshMovUI();
+      if(ok) toast(`Cuenta pasada a ${nomUsuario(data)} ✓`); return;
+    }
+    data.cuentaCompartida = true;
+    usuarios = usuarios.map(u=>u.id===otro.id ? { ...u, cuentaCompartida: true } : u);
+  }
   usuarios = isEdit ? usuarios.map(u=>u.id===id?{...u, ...data}:u) : [...usuarios, data];
   const ok = await Storage.set('usuarios', usuarios);
   closeModal(true); refreshUserUI(); if(ok) toast('Guardado ✓');
