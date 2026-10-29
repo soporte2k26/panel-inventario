@@ -219,7 +219,7 @@
 </head>
 <body>
 <div id="masterGate" style="position:fixed;inset:0;background:radial-gradient(circle at 8% 8%, rgba(244,121,32,0.20), transparent 42%), linear-gradient(160deg, #1A1A1A 0%, #262626 32%, #3A3A3A 52%, #8A4A18 80%, #F47920 100%);display:flex;align-items:center;justify-content:center;z-index:100;">
-  <div style="background:#FAF8F2;border:1px solid #22303A;padding:32px;width:340px;max-width:90vw;text-align:center;font-family:'Georgia',serif;">
+  <div id="gateBox" style="background:#FAF8F2;border:1px solid #22303A;padding:32px;width:340px;max-width:90vw;text-align:center;font-family:'Georgia',serif;">
     <h2 style="margin:0 0 6px;font-size:22px;">NEXO IT</h2>
     <p style="font-size:12.5px;color:#5B6B72;margin:0 0 18px;font-family:'SF Mono','IBM Plex Mono',monospace;">Acceso restringido — Haus / Semah Group<br>Entra con tu correo de trabajo</p>
     <input type="email" id="masterPasscodeInput" placeholder="tucorreo@semah.com" autocomplete="email" style="width:100%;padding:9px 10px;margin-bottom:10px;border:1px solid #C7BEA4;font-family:'SF Mono',monospace;font-size:13px;box-sizing:border-box;">
@@ -247,7 +247,7 @@
         <img src="data:image/webp;base64,UklGRhQcAABXRUJQVlA4WAoAAAAQAAAA8wEAWwAAQUxQSO0PAAAB8Ibt/2ol/v8999400nZ36yB2TtjdTo/d3R1jd9eEw/i2i4GxO/GN+BZ9m29z7C4QhE2s5w1Zr8frtdbaHni870TEBNAn02LfL9sXc/2Z893tmL9/n9EpO336rrfxOaPafxe18PuU5dX7IkuOM0/fn1VPGda5RY0SQbYsvLArLP28eRpksDHTX1w7FTGpSXDWm2NCKlsQzTCI/o3wNl5Zao4drNJMjpPGYubErZ08s85+Y4ui/C+NxswP+nlkkc1ky6JeJmB+0M8jK6yahr3YOG/ksugkK/BPMgPz/X4eWV8nGX3exo0+tJft8dB0tNEczPd727K42jF6oRAJBvxmujFmYY7wy9qKRg76knj9Oyb7yTx8pURWVkgGoJUl1Le3uepDVyYITlywbl/cQ6c8ftM0C+s7BiPJYmtBOwgPqDfvf5I4Y2zW1Tqktuv5sMSwo2kymLd6Z1XFAZqXayKi0nul8MasqofAM3JZRM1vyOAhWVROINaVkceIBAlp9bKkAhg84NKIwl5i/DRfVlT+jwsq/xTjf3tkQRX4yKCSDzBe+emLCt/DuO6nL/pSwt5PYPQ7xmGfwAIfY9s/gVF7TCvzCYz2Qrz2U1hrLK2wEbLV69j/51U7Tsbu+XPeyM5NS5jIVq7ZT8Nn/R4ZHRO5cmL3ZqG5bC7DI6z73F+37D0dd3L3pl/GtixsM4hnkVodBs1ae/Dcib/XLZ/RrYLDwtxrdRw4/be/Y07tWDm5T9uiVuP2DOKZysoOP+xk9Pby5j5myNN5/VOG0+5v7OQn5hg1RWI1KXmmyMwprfrS86mMJuzqGqyoYOfwi68YTopeVE1a2SmZL0RuTxFvKyvwu83xDF6dXdtuJbQAi1VTdeU/LDl5fz9vY1VceJmlp+zplVuAerLEhlJoPePp3nLyTrzOktMO9skly6tj+D8s/3xfPzkd2ZDrpDi6Hk5jqS9+L2oh5bF0fwUVo1jpk0GexqkcqbFa7d+jQ3Rok4QgOdluYP8lmR7jElllxvFB3pi9fng8K07oZ7OSBhdZvnNxiGXQWYhbSiu1WWPVD/q4G6PGbjZiRT2/W9AtkhyaAq2R0fgmq9b8oJ6P2Ij781lGmd2s9s0oL6uYgS2U5L06nY34T2MDFNzHhnS669GXUJQsmgINkzBQY+W3Cd7ExnzT0CKmpLHyK4Usoh12QU7hODZoxjibqmav2JgXSPQOsklaIQ3pg01lA0aYhZNqW4H7n2zEJ2HWUBjTQmTUf8nGjfBT4pilsUHXCi1EwqXRf5Au0BQ24mTT8NtQ8/ntZ2MmNrMEegVxewkj0tnIV0spyHOMDTtMaDCySl4E8g1SJd0QbczDj/zNlieOjZre2RIOYjOx6Swxefv0Xk3qd57w+2MJ/Kq4tDz3WOa7iPkjfmjweYe+k367KVJfqBOyWN4KpC3gcYnRdxum9W9fp9EPw+ccSRMooiZ+94QuzSoXLF6tyfC9iRgvBEKXZv4Hcm+p+A8inucYPz6x81eNu/98DmJnmBXMwX6HvmX88qAg0nU025YK8bUASb7nGH+7tpUXiRbqviM9s+xCzZEF8uYirYDBDF7olo0EA7+LyizepuDEkDA7iQZtxNLKiekXQA6Q9GWMaqtLkW7FjQjfyGYBvbEopGoy5BxtJ/HQixDvdUhx7GQ4Y3UI4UVXJTPzI7Kec8BpX0K/uPTBSZKVEh5KeKeXCP9lqraMPmtKwt+9BXidBXyDRQP5HjN6tRLBHjMyEF4kZTnDMZVJbq41zHuspwSLXw8i3G3IW+blkhIm5iSpue8iKX4mKvwGuV+AwMqJAHc2XxPshpgjltErISSzu4bw9xL6MrzNnaR3eD3LesYDU0lqrj+1nnL2FyTZnRH+xkRHGXxZmuAW6cBLH9PVxF6LdWH0bj6SOxR66AUFv4H+5SCF+Stbz2agqRyimiVkxPcg+fbLyBbzfM5oW5L4G8D9TVcG09xEPO4i70qS7PkIj4QWMrrRRsa1hhNAAVlSexYgle2Qy+Y5gJwlmaUygFt2s+XBOLfIIEaHkXSvW8irAKCIE7kfQC7mFlDdQIpzIq9MU4XRplIoAuAOZvOTUFYg2zPkvEMeNUZ4OrCR0UbkahKAoVZB7wH2NMtfyGmSWx05Y7a8EgoIjGO0FqncjiTmEArVkHByOQ+Aex5WcR0paJKiGlJfEh0HuKzJyknwFriKxJLSugj3EFrIoFbK9cQCvMvTIg4hxUzSn8GzJPsHpJ/J6mCJpF+E0R5q6Cryl9BN5AC5nkiE93tbw25riETmS6uEbDVZS+wfgYFIgq+iocg7T4GyjLZ0QXMhPlHqo8EtHukozVcDnprsJ+yswH5kAynOjXAjgTHIK7sLqoxx2soc5inQ6Nu+4+b+uu3gG0uozWgBaXQf4DLmGozt0fNNQfqrojvIEoHTSBS5ILqCMSeMDzSeZ1jXxUdfsXSTTEEekvyDSF9zLcbW6jVmNEzZBuSKnl8GMtIlDZHBnPRbqKGy99jrZLUm2YbsULAMWWSu09gCvR5IokNZfyRBrwyjNVySW5wUZo7+zt0geQccTWflJjmOLCkvfzayzlRuyVgPvQnIWVJeD2FvnS8hL5dEFVMlMT8aF2yA0hsz2IgmuYYYeI+pwhgvqrcc2a+uPFRE5zskkVwT9dBkMSetKqmo9MYMNqZJXprmjKn6YHdJfxuySV1eqKbOMOSeq6K+8pi1DTkU5NyQwUY1h0MzzW1T/YGFC5xEVqjzgtrqzEXiXBb9FC+P+WVnaXUfsezUqxF3rSAnm/atmez3sB8FriCz1ZET6a6zBjnmuihflALmg0Wl2EamscSk6DUjW5V0I9ptBf7mYTM1YzyfwClkuTpPRtvpzEfiXBhRx6cKOKmLBK9Ilni6hx/pWgIluaIo7DoJ7kA2qssN1dIZgdx3aRS8Jl0eZ/yIrWf46bwyJGoNd1xQvnRslcgKZK+6slAxnR+R966NqPCiBGmc3gYZy+jjjm4kbg2nkeTHxjXRJMariUxEzqirA/nqNETYx8URBYx8IItf5RJroyHbQwi1hggkhoxtDo/72EES7YXE25X1Qt6RbgWohssjcvvpuiTeIRScwOAKwq1hJeL0tL7pjH8h1Azhcsr+QK7pBUOjPwKIHN9flcNfikxgcKfDogYiXN3yKqdh0STsn4p0V3YVWalHF5DdHwVE9q8vSVkr4PkUeJ+dLKoINMTqPC4x3kyMjiC/qQrQkBYCM5B4x8cBka39BQnvfPV6MriKrIouI9FWN5PxOAKHI48din5kMNlHoBbCLT4WiGytH0HcWu8kUt26ZiFcxtoap0vogJRGuJWi48geErS/RA6aa4mlEBW9Aw3Se44EW1ctaL6ldXIyfsCO0G3kbzUlGO0vQusRLmeqbRZDea8ic3T8GHxL1mV/gbwMsrA+GYzfDSF4FpJeQMk8xJlfqCW0xlQxVkMVkPU6lZBUN+uiuQgvt67xLDGlMuHZEwDeoqJ4CrKcxGMR7QtDfYk8tBx6DGzSaYtwaSm7LCLoNZJeyaLyrGOZ3Unmzwg3UrCPwaTcQH2E7/obqTzCFWXlOGGadcB8nYZQOykRFkEjEf6PtxV5T0pkmb+SVP9XyE1vaZ0YnUPoIYT/VJWzmUguaIOk716wCt+uSvoBw3TKQVukbLIKr/sIR9iVVf7MaLYfH7DUWE85NArhnW6SarxD3gZD1SBeZFPS4Ek/EYcTSS8iI/9OxsXo/e58ChYDX+sEQvyljHCroC4QL1FkG5VawVgVx55nuVfzk2Tvuwj/yyal4mtGxxC+GeLf7fLcZmvcVISOI3zQHwqcGM+qbvKbLvLOimkFdeg6dNlNwmrLsMdAvNpTRd5DzNmM49181X2WHeVH0islIfyHt4Q6TxndaZfgdwniqDyy2l5h5tJCkyC+Ukws15wElgocY+bjdSSVSRM7RfpzId6ZC1tsGZT7HsRnC0sLmhrP/IIyrwsdqapfs1X3MQvW7Tv3nqVrU22ksBPE18IQrwUZjF7xI5mFn0OcMNJdxhcxzMyal1BNjF+1d9PJ2XlrMksG1vOH+6vKKPGYxfsL1ML4RTsRrw9mI9VMROXjIX490k9K0NS3zMyxOh0gIye2J7UzIE6dV1zEt8s1hl8XJ7m1UiDmawPyAQUHn+RMH5Ow/RrG/Dx8at+Bc9af1Vg+MCcT5gN98gPe395n8Xc5BGwXMebIbwOJKKjt0kv37ET0MzLUTNQoDWJ+PS0f4t/hz3jOdKvOAPPcqUiKbVEQs3a0W638dsoR1jb8HePpDUn2jxKYtZiRTULzOMirSK12E8+x/ikx6iLDiO3FBuow8/mpHeqVDibyKVK9zW/xjPYj0WYymLWX1y5lMDM3IKKxyPN8EooiRxVQbwnMfOPX78IKZSPyKVqzzYjDqaw/R2eOWbStIaTcNwLLNC2Z5Sa2J/ndUyRknpHA6DrA/Z4h3s5HBoi1Fck8NZGlHrUJ0WEpguuIqDPC5/JitZCrKqh7sozMnYkM99G5bg5tR0Uyom2SJkX27Qqksup9WRKnAtRKM8CJQtk0YJZYNUzyy2IkXuK1kiQ/Is9bCD+uAbVH3iqhSrelyWycWVU2oxbxGRm1dYJh9geT2uyHjNIVobnKUsfZie4AcWJ5jfGoLKFfpargbkTUDOKUbsgqhMOUUGCkcUpmYttjhshQMnDZ68bQ5jpItWN2hjG+gNyOKrpehYgoCuAwIXuaEW4VIbybpuI4EVEUxDxAzOMVtEgN2UY5DaJ5ZjKCDf9yTSUytke/xwaIrEBGLLtVM8CVnBB5b1PxZpIPfTgaiXYToQcG2JKLZDZ/o+ChDxEVfgc4N9Yl8VkMvy+nhqjA8hRDRNKHVVMN9mRVAzcyvvfIl4r2ViGjVojQFF3sZCeJtpnSXk8MoMxDEZ4vNPmRqmv1SXLxS7ISJ/vQh7XjRe6MzkFgIw3jKz6KiPIueq9K+7safeh/i42bFL3omyJkVv/Jd+Wl7K5NRq60LVGec2dbG0mudVLK6wn+pG97inArEbLVmP0/Bef6e5B0j74PZKT+kZd0q7zKLD2qiY3Q3M9Y5hplRLnm3FPxdPVnlPnwWNVnDmxaNmXAtw3DCvqS2csOP+yUcGdFCx8yukf9eZdkJO/uHEAqWx5PB+6uaOpFwjNi0f1+Ih+WGXtGk/FgbnlS6zngvAZcGJKDRCs+Y+bHUwuQxJmxUs/UUEdEJftHxku5s6iOnVx0tjazw3efvZfMnPH88pHNSweVIrPm675w3f7zD53MnPz0+tGFP1ZwI+XB366Pe+hkTrx+dMOYCmTG3E1HhMc+StCYWYu/fyliYvM8ZMRcP67/z/1kZuedk5tmVCK09MND7d3Iet1qjVux9cilJ2nM7Hx+K2bN4C+C6SPQL4edLDIgpycZPNCfTG/zy+1vI8Nny24jue5k6bbAnJ70//0AVlA4IAAMAACwNgCdASr0AVwAPj0ai0MiP6EW2iYJ+APEpuk2XhPsIkDScOM2Ik/wDN39XFpfjCYFmZ/gByGP41+B/hy/pv4S/gB0jX8P/C3Y/+f/0/80R+u/zH8HrhOCr9R1QF4fF/1r0qa3/kP6p9uvuq7NewvPL8y/lfzz6Wf1a9xX6T/X34BP2L6RPmA/Y/92vek/uf7X+4P/LeoB/g/+N6cHsEegT/Ev8h6dXshf2b/2emN6gH/49QD/2da/wW/Bj5Jc1bbgz4NgW8ESRmAkXRo+qit14fovK6fWgNa0BrWgNa0BrQp4KnxHEZ83knilpC7Urp/Sy58gt3tPkX2GliGt+BoRUjQBnXS2L/SxDTbx6AKAb2URKiFeRkdS+uHWPKAApt0ShFkKVPrD4HaO3SIFg85mZKJycpi3TWK5aGZRme3iPkEquGh5Xzp54JuscGv9RfQj6eTBz/4glyi4kEeNq+XyvLeHzCqypvLO273K9PI/r6Zt5ZFh37e5XSS6Gs4KANendZbJgMjSCulHWe5vTtsl8mNH7dtwm7fuHTvMUCC1N/+KIFchf5u7r9LLvdnZjH0ryMleaq/LMrEX8TIGAAD+DWNC2+qAl9ozawh2B+JD7WM2zo3WN4bEf8ix43I+7qbfbDl1v5NMk6XuLuxPDFFt29gV/8sStdXZ1teUReA72HrIbiiaT01cgatgFp3KqE2WfdJRSnf2CYJdZHYpCDprzv0jAGybVt1CPHzCcm5Y46Arz5IAAAAAAELgmrD50vQNCiwJrZTVpE2wN53c+jGCDF/ESEgljIskfSZ/ULrcwUpRLM0O27B8bJguZ1/jP7TB+FLON4mm8Nuv8BZUumvM2YemHaLHcfxx+qUJRj2eHS2tHkxLJVLlaVz4Rnxo/ozz17Ksz2QigpSkehiYeSmF0s52TtfG1igRuX2jarx0uM4E+gQJ28xGrIzkubpkpJRE4FAGwd1KUWdXSPZ9g6oyjloiyOb6d+RpqfjwVgPX8hScdeveawO2jHI+FK3gYSIzTmEGE4OnazwFhsaHqGjkQNFRUXt6839flGkXHl0gUsN+X1fpt2hIM3i++1rfm67SCLq9/2xotaTg6BdGnx1FWT3EGFBLuHRCn0XG6RleDmcsrOdlxpWyzOC66MFqRoMwWPVIc+MbEl5xzk56SXvxvfYHwPfE/ieXlG1L+2xCD3jT1ZB5ggurFThDkZl0NxmpfYIHMmuQVO8h5e044BrZwZwHh8JQZiTagzAkwR97dID4h0KgAfWPXIWyJMJmRCX14c3i8z8zBxQCSWYXCR/bGhtp/k0FmygLbnb2EjqBFM1rE9EpwhUTO3yNhp0GTNE2oMtoBPWudGuwGG4Gc1aWhjFrOY9gHWwHhPmtc8zLPNjyrbbUbQbk0hRmgE7pfB0yqNI7kla/Sw0QgtWZjpVOaKmHb5tX9X7fwlWQQWircHJsOJtVgLSyDb1IfPZtyddowl4ZfCV9wgnbEGGoR83eTCYNzwAz/nyBqzHY/PnPX2XTR1Q8gwJm4G3Dbn3rdZ6bdRXCedSkiC1FXvL6lZEnnALFXh7ERjMY7iy5vRQu8Ehh/x1R8uC9U/PIjQPK+/oOXL3YNVtYWwCDJAf5x/aetHj2RehmhoRRIfnKeFrAoZEXVskQ5tDmZVyVLe/h25QIkSL8JmXhSyTXE2Gqe/wNwcu2N3zgCs2yveyf994qmFq2uZLdnoCi97GrSfYq9yiEFx3xSw2FzRmU1SpB7QkKO0wUnD1QvseIDZvsNgK0i/Gp3diDln0w/kdFqkHyGL4GhbMGuIXa/LWO32G+REL5h54UQADbaKZHWCxTP8AzcrEo1Qx/VxmISzQAS0XFzPOitFoaz2ujKCk3Vy0OAjMGJSg58hfXRSVBPUoO2dBjVNtAZnmMoTxSnQ5xBZlegs9rZqV82rl2URPx/AWEIT3isRC5Rx4GPCVD3BshEju3qSypdOz452MupzlJ1agtQxitF7CGJ6zGFRt0bI/EjQjdGsU7ZEATwJVNoaPq2makPWL+F2y7oNdpBgjS+ziJKdBa9rVMHOMn29pDBQ1h40IueYtMNieZMWm0BpVbKctxrOTAJAHP+7mFQCpCzXTSZ55sFUphDwgKFPfUU27GQZwB6YRz8agfM2a6McjQWwbQx795Rtdn5UpFeqiBy/Qr6f9DsTYyQBZfPlmbNfFGr0nRhTKJ/tbK+q9kdAZM7uvipgifb6MOINZzY2YECzcp33qGgAFLEfMb19HGKhw7hfXkm69/GlRi3BHokV5PJMKEvFf0CxImh1/UcsEhwPNkp/6bdh0SquZgAm6rBllPQ1sYQAAP+VKJ7+zrdtOih5hnA/kdhniTbJm1tLI6iywxW4CL1HbD1PTWAtDMaBL0rhBu5R6FvToNThxw0H0jHpnktlLEAC7lMJtBQLBe+bq1kIpL4Z21QXNv2vFRbJ7WsYQNbmOzI9LmuaRLuKmhqdTOvM5jgRwk1jOViuNEf5NVqGGAmJT2SsATk7r6wAzLswhctNCR/4mUtb2FgyHyslSLkmbpaCVJ3aHj4fZOK0DIFGLpzBbjR+XbCb3riVL48vZZoNTJIdhhtjmqz27GAbEf9fcxeMaI9IGoddPSfKWvVqJtkHzPHL3tk3Q3Q07byKr4OYC4eXwr+dPr1ZKqWx0UBpYS01y5RY1DafR1QsBHAWzu9bHiesDLoM0DpaomoXR0PBEEW5MAR5HwX7G9KoTntBlb6CoOiaDFfCfjlCgqRK84YdtAF6h6UVTg4e08gFR65/8LwKV3/VJ5Gk+tlMRUPWVLnct+En9qTDsQr4UhE9Iybkgc3ma4RZqUiIpDdBRNmvqnmv6ejjt1LRM87vvdrecMLVIyjeslyc9b7IKZecmKQP2G0DTUZd+gWR71quXVnOSmdjoDin5KHKrAskuIOKmp1sk2vKbjasw2o9wqqVX0hjBrU3J8YQecliChyBZ5bZSGmo8asyZvVTAviPTljPaDuBcxMrUlnfjj2iB/90rPlA/5uwMBusiGQIjRY2CoQEMBJFeU5j0f7CJCS9u4kE+IkBCn2JpJeOfc9kIQjgX6taDsoGKVk6BwHR1JcqesSwndHtRyUEj+dMIt7wFllfQJDpKqmNzeyyYxEZVojEUwhSIm4emRE8TczWyOuqBf7BEX36+bB612b/Ryx5PWP8THp4b9ZfJ2auVyByRdXgDM1Um7YoHe5taoN8ckBLtCXgAcije9ykD3+0XaMkAo4lrbTE0zl9r18vh/DDs2jnmO0XKmkHYzcEaGWjVLXIUvlr8B1fTJ46QpQQs6Wu75WKnUTPhPmJLjKCpoi0VfFb4hD9ibpYCN9qaaUpnIJAqh5Mp3odGXyEpEvejJueBTo2Bn0hLEeA/cNcH0MiClnlzBIG2wNGhxOb+NWD38RN9OlvAmKsP/Sv+pOi4AQmssfpZJ99kiV1xQzkZJuEeUyOn45mz8lvXG0XncMC7Itbc4vz4wgp1xvZ/4RJZxxl8TRbkwt+qT2XMuBTGEtY57M6i85TTVEktxAx/Xt6WAbbPPA8/2n3BCAbqP3G/8/homzoTNo7NNcaGfSgIjbPlBgf1BVL5uDP4mQULvpa90MEUEDHXAlRcB11t6N3WdW9nAtQ1cVTKuhLtopdQa102FkCcL+F1GHX9s7d8hxDRsa2azs6sCcKmYmXTPlQaeZK3X9QYQKNzougUljEvYhv7RvKdui8U8U44w82zLGFVB2pbWwPky2Y0GyUwV8/KfXHBIzx/nrULZa5WrC+kmm08Pm2L+WPg5+ls9+MbFYU7QFNtqFVJuWc4wTlLUtBz4GbOgmAooFEpxWxYkhqg36KdT5TioY6QaJKsLFQRys/AmQD2/sRZDkTml0qNp5bpo/HdinGx9Eqo5zvb8sVJ8qlmoHGPhGdcLKEQ9GejxVznTUM4nUHTuY7J9+Rin7FT4xeRPcwrzDVylqYCJfIrRMokg5juO0hWLMKWwywcEJa6yFAux64Ho2jV2SrlfvZ0t6iRgmFKoc7ONkvEWP5cSEsbqjUpVTpAX6zPxSlXhcb+081/grT4qvGewIeJskPKyY7WHloKq1EWeu3Sogprk8LgAAAA=" alt="Docusafe" style="height:21px;width:auto;">
       </div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;"><div class="stamp" id="dateStamp">CARGANDO…</div><div class="stamp" id="syncStatus" style="font-size:10px;">● Conectando…</div><span id="userEmail" style="font-size:10.5px;color:#EDE7D8;font-family:'SF Mono',monospace;"></span><button id="btnLogout" class="secondary" style="font-size:11px;padding:5px 10px;">Cerrar sesión</button><button id="btnRespaldo" class="secondary" style="font-size:11px;padding:5px 10px;">⬇ Descargar respaldo (Excel)</button></div>
+    <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;"><div class="stamp" id="dateStamp">CARGANDO…</div><div class="stamp" id="syncStatus" style="font-size:10px;">● Conectando…</div><span id="userEmail" style="font-size:10.5px;color:#EDE7D8;font-family:'SF Mono',monospace;"></span><button id="btnLogout" class="secondary" style="font-size:11px;padding:5px 10px;">Cerrar sesión</button><button id="btnAccesos" class="secondary" style="font-size:11px;padding:5px 10px;">🔐 Registro de accesos</button><button id="btnRespaldo" class="secondary" style="font-size:11px;padding:5px 10px;">⬇ Descargar respaldo (Excel)</button></div>
   </div>
 
   <div class="meta-row" id="metaRow"></div>
@@ -2248,12 +2248,87 @@ async function enviarEnlace(){
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ mensajeGate('Escribe un correo válido.'); return; }
   if(!window.__sb){ mensajeGate('No hay conexión con la base de datos.'); return; }
   btn.disabled = true; btn.textContent = 'Enviando…';
-  const { error } = await window.__sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname } });
+  const { error } = await window.__sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin + location.pathname, shouldCreateUser: false } });
   btn.disabled = false; btn.textContent = 'Enviar enlace de acceso';
-  if(error) mensajeGate('No se pudo enviar el enlace: ' + error.message);
+  if(error) mensajeGate(/signups? not allowed|not found|no autorizado/i.test(error.message) ? 'Ese correo no tiene acceso a NEXO IT. Pide al administrador de IT que lo agregue.' : 'No se pudo enviar el enlace: ' + error.message);
   else mensajeGate('Listo. Revisa tu correo ' + email + ' y abre el enlace para entrar (revisa también Spam).', true);
 }
+/* ---------- Verificación en dos pasos (código de 6 dígitos con app autenticadora) ---------- */
+function gateHTML(html){ document.getElementById('gateBox').innerHTML = html; }
+const gateTitulo = sub => `<h2 style="margin:0 0 6px;font-size:22px;">NEXO IT</h2><p style="font-size:12.5px;color:#5B6B72;margin:0 0 14px;font-family:'SF Mono','IBM Plex Mono',monospace;">${sub}</p>`;
+const gateInput = `<input id="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Código de 6 dígitos" style="width:100%;padding:9px 10px;margin-bottom:10px;border:1px solid #C7BEA4;font-family:'SF Mono',monospace;font-size:18px;letter-spacing:4px;text-align:center;box-sizing:border-box;">
+  <div id="masterGateError" style="color:#B0512C;font-size:12px;margin-bottom:10px;display:none;line-height:1.5;"></div>`;
+const gateBtn = (id, txt) => `<button id="${id}" style="width:100%;padding:9px;background:#FF7518;color:#22303A;border:none;font-weight:bold;font-family:'SF Mono',monospace;font-size:12px;cursor:pointer;">${txt}</button>
+  <button id="mfaSalir" style="width:100%;margin-top:8px;padding:7px;background:none;border:1px solid #C7BEA4;color:#5B6B72;font-family:'SF Mono',monospace;font-size:11px;cursor:pointer;">Usar otro correo</button>`;
+function gateEventos(btnId, accion){
+  const inp = document.getElementById('mfaCode'), btn = document.getElementById(btnId);
+  const go = async ()=>{ const code = inp.value.replace(/\D/g,''); if(code.length!==6){ mensajeGate('Escribe los 6 dígitos que muestra la app.'); return; }
+    btn.disabled = true; const t = btn.textContent; btn.textContent = 'Verificando…'; await accion(code); btn.disabled = false; btn.textContent = t; };
+  btn.onclick = go; inp.addEventListener('keydown', e=>{ if(e.key==='Enter') go(); }); inp.focus();
+  document.getElementById('mfaSalir').onclick = async ()=>{ try{ await window.__sb.auth.signOut(); }catch(e){} location.reload(); };
+}
+async function asegurarMFA(session){
+  const mfa = window.__sb.auth.mfa;
+  const { data: nivel, error: e1 } = await mfa.getAuthenticatorAssuranceLevel();
+  if(!e1 && nivel && nivel.currentLevel === 'aal2') return true;
+  const { data: f } = await mfa.listFactors();
+  const verificado = ((f && f.totp) || []).find(x=>x.status==='verified');
+  const continuar = async ()=>{ window.__enMfa = false; const { data } = await window.__sb.auth.getSession(); entrar(data.session); };
+  if(verificado){
+    gateHTML(gateTitulo(`Verificación en dos pasos<br>Abre tu app autenticadora y escribe el código de NEXO IT para ${esc(session.user.email)}`) + gateInput + gateBtn('mfaOk','Entrar'));
+    gateEventos('mfaOk', async code=>{
+      const { error } = await mfa.challengeAndVerify({ factorId: verificado.id, code });
+      if(error){ mensajeGate('Código incorrecto o vencido. Intenta con el código nuevo.'); return; }
+      await continuar();
+    });
+    return false;
+  }
+  // Primera vez: registrar la app autenticadora (se borran intentos anteriores sin terminar)
+  for(const x of ((f && f.all) || []).filter(x=>x.status!=='verified')){ try{ await mfa.unenroll({ factorId: x.id }); }catch(e){} }
+  const { data: nuevo, error: e2 } = await mfa.enroll({ factorType:'totp', friendlyName:'NEXO IT ' + new Date().toISOString().slice(0,16) });
+  if(e2 || !nuevo){ gateHTML(gateTitulo('No se pudo preparar la verificación en dos pasos.') + `<div style="color:#B0512C;font-size:12px;">${esc(e2 ? e2.message : 'Error')}</div>`); return false; }
+  gateHTML(gateTitulo('Activa la verificación en dos pasos (solo la primera vez)') +
+    `<div style="font-size:12px;color:#22303A;text-align:left;line-height:1.5;margin-bottom:8px;">1. Abre <b>Google Authenticator</b>, <b>Microsoft Authenticator</b> o similar en tu celular.<br>2. Escanea este código QR.<br>3. Escribe el código de 6 dígitos que aparece.</div>
+     <img src="${nuevo.totp.qr_code}" alt="Código QR" style="width:180px;height:180px;background:#fff;margin:4px auto 6px;display:block;">
+     <details style="font-size:11px;color:#5B6B72;margin-bottom:10px;"><summary style="cursor:pointer;">¿No puedes escanear? Clave manual</summary><code style="word-break:break-all;">${esc(nuevo.totp.secret)}</code></details>` +
+    gateInput + gateBtn('mfaOk','Activar y entrar'));
+  gateEventos('mfaOk', async code=>{
+    const { error } = await mfa.challengeAndVerify({ factorId: nuevo.id, code });
+    if(error){ mensajeGate('Código incorrecto. Revisa que la hora del celular esté bien e intenta con el código nuevo.'); return; }
+    await continuar();
+  });
+  return false;
+}
+/* ---------- Registro de accesos y cierre por inactividad ---------- */
+async function registrarAcceso(evento, detalle){ try{ await window.__sb.rpc('nexoit_registrar', { evento, detalle: detalle || null }); }catch(e){} }
+async function salir(motivo){
+  await registrarAcceso(motivo || 'Cierre de sesión');
+  try{ await window.__sb.auth.signOut(); }catch(e){}
+  try{ if(motivo) sessionStorage.setItem('nexoit_aviso', motivo); }catch(e){}
+  location.reload();
+}
+const INACTIVIDAD_MIN = 30;
+let ultimaActividad = Date.now();
+['mousemove','keydown','click','touchstart','scroll','wheel'].forEach(ev=>addEventListener(ev, ()=>{ ultimaActividad = Date.now(); }, { passive:true }));
+function revisarInactividad(){ if(window.__dentro && Date.now() - ultimaActividad > INACTIVIDAD_MIN*60000) salir('Cierre por inactividad'); }
+setInterval(revisarInactividad, 30000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) revisarInactividad(); });
+window.verAccesos = async ()=>{
+  const { data, error } = await window.__sb.from('nexoit_auditoria').select('creado_en,email,evento,detalle').order('creado_en', { ascending:false }).limit(200);
+  const filas = (data||[]).map(r=>`<tr><td style="white-space:nowrap;">${esc(new Date(r.creado_en).toLocaleString('es-PA',{timeZone:'America/Panama'}))}</td><td>${esc(r.email||'')}</td><td>${esc(r.evento||'')}</td><td>${esc(r.detalle||'')}</td></tr>`).join('');
+  const box = document.getElementById('modalBox'); box.classList.add('ancho');
+  box.innerHTML = `<h3>Registro de accesos y cambios</h3>
+    <div class="eq-resumen" style="margin:0 0 8px;">Últimos 200 eventos: inicios y cierres de sesión, y cada cambio guardado (con la pestaña que se modificó). La sesión se cierra sola tras ${INACTIVIDAD_MIN} minutos sin uso.</div>
+    ${error ? `<div style="color:var(--rust);">No se pudo leer el registro: ${esc(error.message)}</div>` :
+      `<div class="table-scroll"><table style="font-size:12px;"><thead><tr><th>Fecha</th><th>Usuario</th><th>Evento</th><th>Detalle</th></tr></thead><tbody>${filas || '<tr><td colspan="4" class="empty">Sin eventos todavía.</td></tr>'}</tbody></table></div>`}
+    <div class="modal-actions"><button class="secondary" onclick="closeModal(true)">Cerrar</button></div>`;
+  showModal();
+};
 async function entrar(session){
+  if(window.__dentro || window.__enMfa) return;
+  window.__enMfa = true;                       // evita dos pantallas de verificación a la vez
+  if(!(await asegurarMFA(session))) return;
+  window.__enMfa = false;
   if(window.__dentro) return; window.__dentro = true;
   let val = null; try{ val = await window.__sbGet('equipos'); }catch(e){ val = null; }
   if(val === null){
@@ -2266,17 +2341,21 @@ async function entrar(session){
   document.getElementById('masterGate').style.display = 'none';
   document.getElementById('mainWrap').style.display = '';
   document.getElementById('userEmail').textContent = session.user.email;
+  ultimaActividad = Date.now();
+  registrarAcceso('Inicio de sesión');
   init();
 }
 async function arrancarAcceso(){
   if(!window.__sb){ mensajeGate('No hay conexión con la base de datos.'); return; }
+  try{ const av = sessionStorage.getItem('nexoit_aviso'); if(av){ sessionStorage.removeItem('nexoit_aviso'); if(/inactividad/i.test(av)) mensajeGate('Tu sesión se cerró por ' + INACTIVIDAD_MIN + ' minutos sin uso. Vuelve a entrar.'); } }catch(e){}
   window.__sb.auth.onAuthStateChange((ev, s)=>{ if(s && !window.__dentro) entrar(s); });
   const { data } = await window.__sb.auth.getSession();
   if(data && data.session) entrar(data.session);
 }
 document.getElementById('btnMasterUnlock').onclick = enviarEnlace;
 document.getElementById('masterPasscodeInput').addEventListener('keydown', e=>{ if(e.key==='Enter') enviarEnlace(); });
-document.getElementById('btnLogout').onclick = async ()=>{ try{ await window.__sb.auth.signOut(); }catch(e){} location.reload(); };
+document.getElementById('btnLogout').onclick = ()=>salir();
+document.getElementById('btnAccesos').onclick = ()=>verAccesos();
 arrancarAcceso();
 
 async function init(){
