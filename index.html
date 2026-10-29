@@ -910,7 +910,9 @@ const lnMoney = n => (n===undefined || n===null || n==='') ? '—' : '$' + Numbe
 const lnNombre = u => u ? ((u.nombre||'') + ' ' + (u.apellido||'')).trim() : '';
 const lnUsuario = l => l.usuarioId ? usuarios.find(u=>u.id===l.usuarioId) : null;
 const lnLibre = l => !!l.libre && !l.usuarioId;
-const lnPendiente = l => !lnLibre(l) && (!lnUsuario(l) || l.mapeo==='Aproximado' || l.mapeo==='Ambiguo');
+// Línea asignada solo en la línea (persona sin cuenta de correo: mantenimiento, mensajería…): no usa licencias de Gmail/Dropbox
+const lnDirecta = l => !!l.asignacionDirecta && !l.usuarioId;
+const lnPendiente = l => !lnLibre(l) && !lnDirecta(l) && !l.compartido && (!lnUsuario(l) || l.mapeo==='Aproximado' || l.mapeo==='Ambiguo');
 // Líneas que se pueden dar a otra persona: libres, sin usuario, o de alguien que ya salió
 function lnSalidos(){
   const ids = new Set(), noms = new Set();
@@ -998,7 +1000,7 @@ function renderLnTable(){
     if(mapeoF==='ok' && lnPendiente(l)) return false;
     if(q){
       const u = lnUsuario(l);
-      const txt = [l.linea,l.servicio,l.grupo,l.modelo,l.comentarios,lnNombre(u),u&&u.correo,...lnEquipos(l).map(e=>(e.placa||'')+' '+(e.serie||'')+' '+(e.equipo||''))];
+      const txt = [l.linea,l.servicio,l.asignadoA,l.area,l.grupo,l.modelo,l.comentarios,lnNombre(u),u&&u.correo,...lnEquipos(l).map(e=>(e.placa||'')+' '+(e.serie||'')+' '+(e.equipo||''))];
       if(!txt.some(v=>sinAcentos(v).includes(q))) return false;
     }
     return true;
@@ -1009,6 +1011,7 @@ function renderLnTable(){
     const u = lnUsuario(l), a = lnAlerta(l), d = lnDias(l), eqs = lnEquipos(l);
     const usuarioHtml = u
       ? `<b>${esc(lnNombre(u))}</b><div class="ln-sub">${esc(u.empresa||'')}</div>${l.mapeo==='Aproximado'?'<span class="tag rust" title="El nombre en la factura es distinto: confirma que es esta persona">Confirmar</span>':''}`
+      : lnDirecta(l) ? `<b>${esc(l.asignadoA||l.servicio||'')}</b><div class="ln-sub">${esc(l.area||'Asignada solo en la línea')}</div><span class="tag" title="Asignada solo en la línea: sin cuenta de correo ni licencias">Sin cuenta</span>`
       : lnLibre(l) ? `<span class="tag" style="background:#D1E7DD;color:#0F5132;">Libre</span>${l.anteriorUsuario?`<div class="ln-sub">Antes: ${esc(l.anteriorUsuario)}${l.liberadaEn?' · '+lnFecha(l.liberadaEn):''}${l.liberadaActa?' · '+esc(l.liberadaActa):''}</div>`:''}`
       : `<span class="tag rust">${l.mapeo==='Ambiguo'?'Elegir usuario':'Sin usuario'}</span>`;
     const eqHtml = eqs.length ? eqs.map(e=>`<div>${esc(e.placa||e.serie||'')}${e.equipo?' · '+esc(e.equipo):''}</div>`).join('') : '<span style="color:var(--ink-soft)">—</span>';
@@ -1049,7 +1052,8 @@ function openLnModal(existing){
   const cuentas = [...new Set(lineas.map(x=>x.cuenta).filter(Boolean))];
   const us = [...usuarios].sort((a,b)=> String(a.empresa).localeCompare(String(b.empresa),'es') || lnNombre(a).localeCompare(lnNombre(b),'es'));
   const optUs = `<option value="__libre" ${lnLibre(l)?'selected':''}>— Libre (disponible para asignar) —</option>` +
-    `<option value="" ${!l.usuarioId && !lnLibre(l)?'selected':''}>— Sin usuario (línea de servicio o persona no registrada) —</option>` +
+    `<option value="__directa" ${lnDirecta(l)?'selected':''}>— Asignar solo en la línea (persona sin correo: mantenimiento, mensajería…) —</option>` +
+    `<option value="" ${!l.usuarioId && !lnLibre(l) && !lnDirecta(l)?'selected':''}>— Sin usuario (pendiente de asignar) —</option>` +
     us.map(u=>`<option value="${esc(u.id)}" ${u.id===l.usuarioId?'selected':''}>${esc(u.empresa)} · ${esc(lnNombre(u))} (${esc(u.correo||'sin correo')})</option>`).join('') +
     (()=>{ const solo = personasSoloEnEquipos(); return solo.length ? `<optgroup label="Con equipo pero sin usuario (se crea al guardar)">${solo.map(p=>`<option value="__eq:${esc(p.equipoId)}">${esc(p.empresa)} · ${esc(p.nombre)} (nuevo en Usuarios)</option>`).join('')}</optgroup>` : ''; })();
   const aviso = l.mapeo==='Aproximado' ? `<div class="eq-resumen" style="margin:0 0 10px;">En la factura aparece como <b>${esc(l.servicio)}</b>. Confirma que el usuario elegido es correcto y guarda.</div>`
@@ -1064,6 +1068,13 @@ function openLnModal(existing){
     <datalist id="dl_grupos">${grupos.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
     <div class="field"><label>Asignada a (como sale en la factura)</label><input id="n_servicio" type="text" value="${esc(l.servicio)}"></div>
     <div class="field"><label>Usuario NexoIT</label><select id="n_usuario">${optUs}</select></div>
+    <div id="n_directa" style="display:none;">
+      <div class="eq-resumen" style="margin:0 0 8px;">La línea queda asignada <b>solo aquí</b>. No se crea un usuario ni se usa licencia de Gmail o Dropbox: esas son aparte, en la pestaña Usuarios.</div>
+      <div class="field"><label>Nombre de quien la usa</label><input id="n_asignado" type="text" value="${esc(l.asignadoA || (!l.usuarioId ? l.servicio : '') || '')}" placeholder="Ej. Juan Pérez"></div>
+      <div class="field"><label>Área o puesto</label><input id="n_area" type="text" list="dl_areas" value="${esc(l.area||'')}" placeholder="Mantenimiento, Mensajería, Seguridad…"></div>
+      <datalist id="dl_areas"><option value="Mantenimiento"><option value="Mensajería"><option value="Seguridad"><option value="Limpieza"><option value="Conductor"><option value="Ventas de campo"></datalist>
+    </div>
+    <div id="n_pista" class="eq-resumen" style="display:none;margin:0 0 8px;"></div>
     <div class="field"><label>¿Tiene celular de la empresa?</label><select id="n_celular">${opcionesLista(['SI','NO'], l.celular||'SI', '')}</select></div>
     <div class="field"><label>Modelo del celular</label><input id="n_modelo" type="text" value="${esc(l.modelo)}" placeholder="Ej. Samsung A17, iPhone"></div>
     <div class="field"><label>Precio actual (USD/mes)</label><input id="n_precio" type="number" step="0.01" value="${esc(l.precioActual)}"></div>
@@ -1078,6 +1089,16 @@ function openLnModal(existing){
     </div>
   `;
   showModal();
+  const sel = document.getElementById('n_usuario');
+  const pintar = ()=>{
+    const v = sel.value, dir = v==='__directa';
+    document.getElementById('n_directa').style.display = dir ? '' : 'none';
+    const pista = document.getElementById('n_pista'), u = usuarios.find(x=>x.id===v);
+    if(v===''){ pista.style.display=''; pista.innerHTML = '¿La usa alguien <b>sin cuenta de correo</b> (mantenimiento, mensajería…)? Elige <b>“Asignar solo en la línea”</b> para que no quede pendiente ni pida licencia.'; }
+    else if(u && u.sinCorreo){ pista.style.display=''; pista.innerHTML = `${esc(lnNombre(u))} no tiene cuenta de correo. Si solo tiene esta línea, puedes usar <b>“Asignar solo en la línea”</b>.`; }
+    else pista.style.display = 'none';
+  };
+  sel.addEventListener('change', pintar); pintar();
 }
 
 window.saveLn = async function(id, isEdit){
@@ -1087,7 +1108,8 @@ window.saveLn = async function(id, isEdit){
   const linea = v('n_linea').replace(/[\s-]/g,'');
   if(!linea){ alert('Escribe el número de línea.'); return; }
   if(lineas.some(x=>x.id!==id && String(x.linea)===linea)){ alert('Esa línea ya existe en la lista.'); return; }
-  let selUs = v('n_usuario'); const marcarLibre = selUs==='__libre';
+  let selUs = v('n_usuario'); const marcarLibre = selUs==='__libre', directa = selUs==='__directa';
+  if(directa){ selUs = ''; if(!v('n_asignado')){ alert('Escribe el nombre de quien usa la línea.'); return; } }
   let usCreado = null;
   if(selUs.startsWith('__eq:')){
     const e = equipo.find(x=>x.id===selUs.slice(5));
@@ -1097,7 +1119,8 @@ window.saveLn = async function(id, isEdit){
   }
   const usuarioId = marcarLibre ? '' : selUs;
   let mapeo = previo.mapeo || '';
-  if(!usuarioId) mapeo = 'Sin usuario';
+  if(directa) mapeo = 'Asignación directa';
+  else if(!usuarioId) mapeo = 'Sin usuario';
   else if(usuarioId!==previo.usuarioId || mapeo!=='Exacto') mapeo = 'Confirmado';
   let fechaRenovacion = v('n_fRenov');
   if(!fechaRenovacion && v('n_fContrato')) fechaRenovacion = lnSumarMeses(v('n_fContrato'), LN_CICLO_MESES);
@@ -1107,11 +1130,13 @@ window.saveLn = async function(id, isEdit){
     precioActual: num('n_precio'), precioRenovacion: num('n_precioRen'),
     fechaContrato: v('n_fContrato'), fechaRenovacion, accion: v('n_accion'), comentarios: v('n_coment')
   };
+  Object.assign(data, directa ? { asignacionDirecta: true, asignadoA: v('n_asignado'), area: v('n_area') } : { asignacionDirecta: '', asignadoA: '', area: '' });
+  if(directa && (previo.usuarioId || lnDirecta(previo)) && !lnDirecta(previo)) data.anteriorUsuario = lnNombre(lnUsuario(previo)) || previo.anteriorUsuario || '';
   if(marcarLibre){
     Object.assign(data, { mapeo:'Libre', libre:true, anteriorUsuario: lnLibre(previo) ? (previo.anteriorUsuario||'') : (lnNombre(lnUsuario(previo)) || previo.servicio || ''), liberadaEn: lnLibre(previo) ? (previo.liberadaEn||hoyISO()) : hoyISO() });
   } else {
     Object.assign(data, { libre:'', liberadaEn:'', liberadaActa:'' });
-    if(usuarioId && usuarioId!==previo.usuarioId && (previo.usuarioId || lnLibre(previo))) data.anteriorUsuario = lnNombre(lnUsuario(previo)) || previo.anteriorUsuario || '';
+    if(usuarioId && usuarioId!==previo.usuarioId && (previo.usuarioId || lnLibre(previo))) data.anteriorUsuario = lnNombre(lnUsuario(previo)) || previo.asignadoA || previo.anteriorUsuario || '';
   }
   const limpio = o => Object.fromEntries(Object.entries(o).filter(([,x])=>x!=='' && x!==null && x!==undefined));
   const sinCalculados = ({usuarioNombre, usuarioEmpresa, equiposAsignados, ...r}) => r;
@@ -1435,8 +1460,8 @@ function revisionDatos(){
       .map(u=>{ const n = `${u.nombre||''} ${u.apellido||''}`.trim(), p = (u.correo||'').trim() ? 'Correo repetido' : 'Sin correo';
         return F('usuarios', [n, u.correo||'—', u.empresa||'', p], 'editUser', u.id, `${n}: ${p.toLowerCase()}`); }) });
   // 7) Líneas sin usuario
-  sec.push({ id:'lineas', titulo:'Líneas sin usuario enlazado', ayuda:'Líneas activas que no están enlazadas a nadie de Usuarios (no incluye las compartidas ni las marcadas para cancelar o no renovar).',
-    cols:['Línea','Grupo','Asignada a (factura)','Acción'], filas: lineas.filter(l=>!lnUsuario(l) && !l.compartido && !/cancel|no renov/i.test(l.accion||''))
+  sec.push({ id:'lineas', titulo:'Líneas sin usuario enlazado', ayuda:'Líneas activas sin dueño. Si la usa alguien sin cuenta de correo (mantenimiento, mensajería…), ábrela y elige “Asignar solo en la línea”. No incluye las compartidas, libres ni las marcadas para cancelar o no renovar.',
+    cols:['Línea','Grupo','Asignada a (factura)','Acción'], filas: lineas.filter(l=>!lnUsuario(l) && !l.compartido && !lnDirecta(l) && !lnLibre(l) && !/cancel|no renov/i.test(l.accion||''))
       .map(l=>F('lineas', [l.linea, l.grupo||'', l.servicio||l.usuarioNombre||'', l.accion||''], 'editLn', l.id, `Línea ${l.linea} sin usuario`)) });
   return sec;
 }
@@ -2365,10 +2390,16 @@ function refreshUserUI(){
 }
 window.editUser = function(id){ openUserModal(usuarios.find(u=>u.id===id)); }
 window.delUser = async function(id){
-  if(!confirm('¿Eliminar este usuario?')) return;
-  usuarios = usuarios.filter(u=>u.id!==id);
-  const ok = await Storage.set('usuarios', usuarios);
-  refreshUserUI(); if(ok) toast('Usuario eliminado');
+  const u = usuarios.find(x=>x.id===id); if(!u) return;
+  const { eqs, lns } = cosasDeUsuario(u), nom = nomUsuario(u);
+  const det = [lns.length ? `• Línea(s) ${lns.map(l=>l.linea).join(', ')}: quedan asignadas solo en la línea a nombre de ${nom} (sin licencias).` : '',
+               eqs.length ? `• ${eqs.length} equipo(s): siguen a nombre de ${nom}, sin enlazar a un usuario.` : ''].filter(Boolean).join('\n');
+  if(!confirm(`¿Eliminar a ${nom}${u.correo ? ' (' + u.correo + ')' : ''} de Usuarios?` + (det ? '\n\n' + det : ''))) return;
+  usuarios = usuarios.filter(x=>x.id!==id);
+  if(lns.length) lineas = lineas.map(l=>lns.some(x=>x.id===l.id) ? (({usuarioId, usuarioNombre, usuarioEmpresa, ...r})=>({ ...r, asignacionDirecta:true, asignadoA:nom, mapeo:'Asignación directa' }))(l) : l);
+  if(eqs.length) equipo = equipo.map(e=>eqs.some(x=>x.id===e.id) ? (({usuarioId, ...r})=>r)(e) : e);
+  const ok = await Storage.set('usuarios', usuarios) && (!lns.length || await Storage.set('lineas', lineas)) && (!eqs.length || await Storage.set('equipos', equipo));
+  refreshUserUI(); if(lns.length) refreshLnUI(); if(eqs.length) refreshEqUI(); if(ok) toast('Usuario eliminado');
 }
 function opcionesEmpresa(actual){
   const lista = EMPRESAS.includes(actual) || !actual ? EMPRESAS : [...EMPRESAS, actual];
@@ -2532,7 +2563,7 @@ document.getElementById('btnRespaldo').onclick = function(){
   hoja(usadas, [['empresa','Empresa'],['fabricante','Marca'],['equipo','Modelo'],['serie','Serie'],['procesador','Procesador'],['ram','RAM'],['disco','Disco'],['ultimoUsuario','Último usuario'],['procedencia','Procedencia'],['condicion','Condición'],['notas','Notas']], 'Laptops disponibles');
   hoja(usuarios, [['nombre','Nombre'],['apellido','Apellido'],['correo','Correo'],['empresa','Empresa'],['googleWorkspace','Google Workspace'],['dropbox','Dropbox']], 'Usuarios');
   hoja(licenses, [['nombre','Herramienta'],['proveedor','Proveedor'],['empresa','Empresa'],['asientos','Asientos'],['costo','Costo'],['frecuencia','Frecuencia'],['categoria','Categoría']], 'Licencias');
-  hoja(lineas, [['grupo','Grupo'],['linea','Línea'],['cuenta','Cuenta'],['servicio','Asignada a (factura)'],[r=>lnNombre(lnUsuario(r)),'Usuario NexoIT'],
+  hoja(lineas, [['grupo','Grupo'],['linea','Línea'],['cuenta','Cuenta'],['servicio','Asignada a (factura)'],[r=>lnNombre(lnUsuario(r)) || (lnDirecta(r) ? r.asignadoA + (r.area ? ' (' + r.area + ')' : '') : ''),'Usuario NexoIT'],
     [r=>{const u=lnUsuario(r); return u?u.correo||'':'';},'Correo'],[r=>lnEquipos(r).map(e=>(e.placa||e.serie||'')+' '+(e.equipo||'')).join('; '),'Equipo asignado'],
     ['celular','Celular'],['modelo','Modelo'],['precioActual','Precio actual'],['precioRenovacion','Precio renovación'],
     ['fechaContrato','Fecha contrato'],['fechaRenovacion','Fecha renovación'],[r=>lnAlerta(r),'Alerta'],['accion','Acción'],['comentarios','Comentarios']], 'Líneas');
