@@ -562,7 +562,8 @@ function enUsoLic(l){
   return null;
 }
 function resumenEmpresa(emp){
-  const us = usuarios.filter(u=>u.empresa===emp);
+  // Solo cuentan personas con licencia (Gmail o Dropbox); las líneas y personas sin cuenta no suman
+  const us = usuarios.filter(u=>u.empresa===emp && (tieneGmail(u) || tieneDropbox(u)));
   const eqs = equipo.filter(x=>x.empresa===emp);
   const lics = licenses.filter(l=>l.empresa===emp);
   const contratadas = re => lics.filter(l=>re.test(((l.nombre||'')+' '+(l.proveedor||'')).toLowerCase())).reduce((a,l)=>a+(parseInt(l.asientos)||0),0);
@@ -583,7 +584,7 @@ function renderLicStats(){
       <div class="lic-emp">${esc(emp.toUpperCase())}</div>
       <div class="kpis">
         <div class="kpi"><div class="n">${r.equipos}</div><div class="l">Equipos</div></div>
-        <div class="kpi"><div class="n">${r.usuarios}</div><div class="l">Usuarios</div></div>
+        <div class="kpi" title="Usuarios con licencia de Gmail o Dropbox. No suma líneas ni personas sin cuenta de correo."><div class="n">${r.usuarios}</div><div class="l">Usuarios con licencia</div></div>
         <div class="kpi" title="En uso / contratadas"><div class="n ${cls(r.gmail,r.gmailContr)}">${r.gmail}<small> / ${r.gmailContr}</small></div><div class="l">Gmail</div></div>
         <div class="kpi" title="En uso / contratadas"><div class="n ${cls(r.dropbox,r.dropboxContr)}">${r.dropbox}<small> / ${r.dropboxContr}</small></div><div class="l">Dropbox</div></div>
       </div>
@@ -608,7 +609,7 @@ function renderLicTable(){
   tbody.innerHTML = grupos.map(emp=>{
     const ls = rows.filter(l=>l.empresa===emp).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
     const r = resumenEmpresa(emp);
-    const cab = `<tr class="grupo"><td colspan="9">${esc((emp||'Sin empresa').toUpperCase())} &nbsp;·&nbsp; ${r.equipos} equipos &nbsp;·&nbsp; ${r.usuarios} usuarios &nbsp;·&nbsp; Gmail ${r.gmail}/${r.gmailContr} &nbsp;·&nbsp; Dropbox ${r.dropbox}/${r.dropboxContr}</td></tr>`;
+    const cab = `<tr class="grupo"><td colspan="9">${esc((emp||'Sin empresa').toUpperCase())} &nbsp;·&nbsp; ${r.equipos} equipos &nbsp;·&nbsp; ${r.usuarios} usuarios con licencia &nbsp;·&nbsp; Gmail ${r.gmail}/${r.gmailContr} &nbsp;·&nbsp; Dropbox ${r.dropbox}/${r.dropboxContr}</td></tr>`;
     if(!ls.length) return (q ? '' : cab + `<tr><td colspan="9" class="empty" style="padding:14px;">Sin licencias registradas para ${esc(emp)}. Usa “+ Nueva licencia”.</td></tr>`);
     return cab + ls.map(l=>{
       const uso = enUsoLic(l); const con = parseInt(l.asientos);
@@ -2318,7 +2319,7 @@ function opcionesLista(lista, actual, vacio){
   const l = actual && !lista.includes(actual) ? [...lista, actual] : lista;
   return (vacio?`<option value="">${vacio}</option>`:'') + l.map(v=>`<option value="${esc(v)}" ${v===actual?'selected':''}>${esc(v)}</option>`).join('');
 }
-const tieneGmail = u => !!(u.googleWorkspace && String(u.googleWorkspace).trim());
+const tieneGmail = u => !!(u.googleWorkspace && String(u.googleWorkspace).trim()) && !/sin licencia/i.test(u.gmailPlan||'');
 const tieneDropbox = u => !!(u.dropbox && String(u.dropbox).trim() && !/^no$/i.test(u.dropbox));
 const planCorto = p => { p = String(p||''); if(/standar/i.test(p)) return 'Business Standard'; if(/starter/i.test(p)) return 'Business Starter'; return p ? p.slice(0,30) : ''; };
 
