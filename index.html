@@ -1427,8 +1427,8 @@ function revisionDatos(){
     const q = [];
     if(eqs.length) q.push('Equipo asignado: ' + eqs.map(e=>`${e.equipo||e.tipo||'equipo'} (${e.serie||'sin serie'})`).join('; '));
     if(lns.length) q.push('Línea: ' + lns.map(l=>l.linea).join(', '));
-    if(u && u.dropbox==='Sí') q.push('Dropbox activo');
-    if(u && u.googleWorkspace && !/sin licencia/i.test(u.gmailPlan||'')) q.push('Cuenta Google (' + u.googleWorkspace + ')');
+    if(u && !u.pendienteReasignar && u.dropbox==='Sí') q.push('Dropbox activo');
+    if(u && !u.pendienteReasignar && u.googleWorkspace && !/sin licencia/i.test(u.gmailPlan||'')) q.push('Cuenta Google (' + u.googleWorkspace + ')');
     if(!q.length) return;
     const [ir, id] = u ? ['editUser', u.id] : eqs.length ? ['editEq', eqs[0].id] : ['editLn', lns[0].id];
     pend.push(F('salidas', [m.colaborador, fechaCorta(m.ultimoDia || m.fecha), m.numero || '', q.join(' · ')], ir, id, `${m.colaborador} ya salió y tiene pendientes`));
@@ -1463,6 +1463,10 @@ function revisionDatos(){
     cols:['Nombre','Correo','Empresa','Problema'], filas: usuarios.filter(u=>(!(u.correo||'').trim() && !u.sinCorreo) || (cnt[(u.correo||'').trim().toLowerCase()]>1 && !u.cuentaCompartida))
       .map(u=>{ const n = `${u.nombre||''} ${u.apellido||''}`.trim(), p = (u.correo||'').trim() ? 'Correo repetido' : 'Sin correo';
         return F('usuarios', [n, u.correo||'—', u.empresa||'', p], 'editUser', u.id, `${n}: ${p.toLowerCase()}`); }) });
+  // Cuentas que quedaron libres por una salida y esperan a la persona nueva
+  sec.push({ id:'reasignar', titulo:'Cuentas por reasignar', ayuda:'Quedaron listas en una salida. Al registrar la entrada de la persona nueva, elige la cuenta en “Cuenta de correo” y se cambia el nombre conservando las licencias. También puedes cambiarle el nombre en Usuarios.',
+    cols:['Correo','Antes de','Salida','Licencias'], filas: usuarios.filter(u=>u.pendienteReasignar)
+      .map(u=>F('reasignar', [u.correo||'—', u.titularSalio||lnNombre(u), [u.salidaActa, fechaCorta(u.salidaFecha)].filter(Boolean).join(' · '), [tieneGmail(u)?'Gmail':'', tieneDropbox(u)?'Dropbox':''].filter(Boolean).join(' + ') || '—'], 'editUser', u.id, `Cuenta ${u.correo} por reasignar`)) });
   // 7) Líneas sin usuario
   sec.push({ id:'lineas', titulo:'Líneas sin usuario enlazado', ayuda:'Líneas activas sin dueño. Si la usa alguien sin cuenta de correo (mantenimiento, mensajería…), ábrela y elige “Asignar solo en la línea”. No incluye las compartidas, libres ni las marcadas para cancelar o no renovar.',
     cols:['Línea','Grupo','Asignada a (factura)','Acción'], filas: lineas.filter(l=>!lnUsuario(l) && !l.compartido && !lnDirecta(l) && !lnLibre(l) && !/cancel|no renov/i.test(l.accion||''))
@@ -1556,11 +1560,15 @@ function personalConEquipo(){
     p.equipos.push(e); p.empresa = p.empresa || e.empresa || (u&&u.empresa) || ''; p.departamento = p.departamento || e.departamento || '';
   });
   lineas.forEach(l=>{
-    const u = lnUsuario(l) || porNombre.get(normNom(l.usuarioNombre)) || null;
-    if(!u && !(l.usuarioNombre||'').trim()) return;
-    const p = ficha(u, l.usuarioNombre);
+    if(lnLibre(l) || l.compartido) return;
+    const nomL = (typeof lnDirecta==='function' && lnDirecta(l)) ? l.asignadoA : l.usuarioNombre;
+    const u = lnUsuario(l) || porNombre.get(normNom(nomL)) || null;
+    if(!u && !(nomL||'').trim()) return;
+    const p = ficha(u, nomL);
     p.lineas.push(l); p.empresa = p.empresa || (u&&u.empresa) || l.usuarioEmpresa || '';
   });
+  // Personas que solo tienen cuenta de correo o licencia (sin equipo ni línea) también pueden tener salida
+  usuarios.forEach(u=>{ if(u.pendienteReasignar || !(tieneGmail(u) || tieneDropbox(u))) return; const p = ficha(u); p.empresa = p.empresa || u.empresa || ''; });
   // Une fichas de la misma persona registrada con IDs distintos (mismo nombre y empresa)
   const unidas = new Map();
   [...mapa.values()].filter(p=>p.nombre).forEach(p=>{
@@ -1576,7 +1584,8 @@ function personalConEquipo(){
   const repetidos = new Set(); const vistos = new Set();
   lista.forEach(p=>{ const k = normNom(p.nombre); if(vistos.has(k)) repetidos.add(k); vistos.add(k); });
   lista.forEach(p=>{
-    const partes = [p.equipos.length ? `${p.equipos.length} equipo${p.equipos.length>1?'s':''}` : '', p.lineas.length ? `${p.lineas.length} línea${p.lineas.length>1?'s':''}` : ''].filter(Boolean).join(', ');
+    const partes = [p.equipos.length ? `${p.equipos.length} equipo${p.equipos.length>1?'s':''}` : '', p.lineas.length ? `${p.lineas.length} línea${p.lineas.length>1?'s':''}` : '',
+                    p.usuario && (tieneGmail(p.usuario) || tieneDropbox(p.usuario)) ? 'cuenta ' + (p.usuario.correo || '') : ''].filter(Boolean).join(', ') || 'sin activos';
     p.etiqueta = `${p.nombre} — ${p.empresa||'sin empresa'} · ${partes}` + (repetidos.has(normNom(p.nombre)) && p.usuario && p.usuario.correo ? ` (${p.usuario.correo})` : '');
   });
   return lista.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
@@ -1612,12 +1621,21 @@ function aplicarFichaSalida(p){
     ${u ? `<div>Correo: ${esc(u.correo||'—')} · Gmail: ${esc(u.googleWorkspace||u.gmailPlan||'—')} · Dropbox: ${esc(u.dropbox||'—')}</div>` : ''}
     <div style="margin-top:4px;"><b>Equipos a su nombre</b> (se marcan como devueltos al guardar):</div>
     ${p.equipos.length ? p.equipos.map(e=>`<label><input type="checkbox" class="m_dev" value="${esc(e.id)}" checked> ${eqTxt(e)}${e===principal?' — <i>equipo principal del acta</i>':''}</label>`).join('') : '<div>Ninguno</div>'}
-    ${p.lineas.length ? `<div style="margin-top:4px;"><b>Líneas</b> (quedan <b>libres</b> en Líneas al guardar, listas para asignar a otra persona):</div>${p.lineas.map(l=>`<label><input type="checkbox" class="m_ln_lib" value="${esc(l.id)}" checked> ${esc(l.linea||'')} · ${esc(l.grupo||'')}${String(l.celular||'').toUpperCase()==='SI'?' · con celular'+(l.modelo?' '+esc(l.modelo):''):''}</label>`).join('')}` : ''}
+    ${p.lineas.length ? `<div style="margin-top:6px;color:var(--rust);"><b>⚠ Esta persona tiene ${p.lineas.length > 1 ? p.lineas.length + ' líneas asignadas' : 'una línea asignada'}.</b> Se da de baja de su nombre y queda <b>libre</b> en Líneas (con su celular) para asignarla a la persona nueva:</div>${p.lineas.map(l=>`<label><input type="checkbox" class="m_ln_lib" value="${esc(l.id)}" checked> ${esc(l.linea||'')} · ${esc(l.grupo||'')}${String(l.celular||'').toUpperCase()==='SI'?' · con celular'+(l.modelo?' '+esc(l.modelo):''):''}${lineaEnIngreso(p, l) ? '' : ' <span class="tag" title="No aparece en su acta de entrada: se le dio después">asignada después del ingreso</span>'}</label>`).join('')}` : ''}
+    ${u && (tieneGmail(u) || tieneDropbox(u)) ? `<div style="margin-top:6px;"><b>Cuenta y licencias:</b> ${esc(u.correo||'sin correo')}${tieneGmail(u) ? ' · Gmail' + (u.gmailPlan ? ' (' + esc(u.gmailPlan) + ')' : '') : ''}${tieneDropbox(u) ? ' · Dropbox' : ''}</div>
+      <label><input type="radio" name="m_cuenta_sal" value="reasignar" checked> Dejar la cuenta <b>lista para reasignar</b> a la persona nueva (solo se cambia el nombre; conserva Gmail y Dropbox)</label>
+      <label><input type="radio" name="m_cuenta_sal" value="mantener"> No cambiar la cuenta por ahora</label>` : ''}
     <div class="falta-lista"></div></div>`;
   marcarFaltantesSalida();
   refrescarCuentas();
 }
 
+// ¿La línea aparece en alguna acta de entrada de esta persona?
+function lineaEnIngreso(p, l){
+  const n = normNom(p.nombre);
+  return movs.some(m=>m.tipo==='Entrada' && ((p.usuarioId && m.usuarioId===p.usuarioId) || normNom(m.colaborador)===n) &&
+    ((m.lineaAsignada && m.lineaAsignada.id===l.id) || String(m.sim||'').replace(/\D/g,'').includes(String(l.linea||'').replace(/\D/g,''))));
+}
 /* --- Directorio unificado: toda persona con equipo o línea existe en Usuarios --- */
 function buscarUsuarioPorNombre(nombre){
   const n = normNom(nombre); if(!n) return null;
@@ -1740,7 +1758,9 @@ function openMovModal(tipo, pre={}){
     <div class="grid2">${fSel('m_lap_estado','Estado de la laptop',estados,ent?'Nuevo':'Bueno / desgaste normal')}<div></div></div>
     <div class="grid2">${fIn('m_cel_modelo','Celular: marca / modelo (si aplica)')}${fIn('m_cel_imei','Celular: IMEI')}${fSel('m_cel_estado','Celular: estado',estados,'N/A')}${ent?fIn('m_sim','Línea telefónica / SIM'):'<div></div>'}</div>
     ${ent ? `<div class="field"><label>Asignar línea telefónica</label><select id="m_linea_sel"><option value="">— No asignar línea / la escribo a mano —</option>${lnReasignables().map(({l,motivo})=>`<option value="${esc(l.id)}">${esc(l.linea)} · ${esc(l.grupo||'')} · ${esc(motivo)}${String(l.celular).toUpperCase()==='SI'?' · con celular'+(l.modelo?' '+esc(l.modelo):''):''}</option>`).join('')}</select></div>
-    <div id="m_linea_info" class="eq-resumen" style="display:none;margin:0 0 8px;"></div>` : ''}
+    <div id="m_linea_info" class="eq-resumen" style="display:none;margin:0 0 8px;"></div>
+    ${usuarios.some(u=>u.pendienteReasignar) ? `<div class="field"><label>Cuenta de correo (Gmail / Dropbox)</label><select id="m_cuenta_reasig"><option value="">— No usar una cuenta libre —</option>${usuarios.filter(u=>u.pendienteReasignar).map(u=>`<option value="${esc(u.id)}">${esc(u.correo||'')} · ${esc(u.empresa||'')} · antes de ${esc(u.titularSalio||lnNombre(u))}${tieneGmail(u)?' · Gmail':''}${tieneDropbox(u)?' · Dropbox':''}</option>`).join('')}</select></div>
+    <div class="eq-resumen" style="margin:0 0 8px;font-size:12px;">Si eliges una cuenta, se le cambia el nombre a esta persona y conserva sus licencias.</div>` : ''}` : ''}
     <div class="grid2">${fIn('m_otro_eq','Otro equipo: tipo y marca / modelo')}${fIn('m_otro_serie','Otro equipo: N.º de serie')}</div>
     ${fLbl('Accesorios celular')}${fChk('m_acc_cel',['Cargador','Cable USB'])}
     ${fLbl('Accesorios laptop')}${fChk('m_acc_lap', ent?['Cargador','Mochila / bolso','Mouse','Adaptador']:['Cargador','Mouse','Mochila / bolso','Adaptador'], ['Cargador'])}
@@ -2214,6 +2234,22 @@ window.guardarMov = async function(tipo){
   };
   if(ent && fichaEnt) m.usuarioId = fichaEnt.usuarioId || '';
   const usAntes = usuarios; let usuarioCreado = null;
+  // Entrada con una cuenta que quedó libre por una salida: la cuenta cambia de nombre y conserva sus licencias
+  const cuentaReasig = ent ? usuarios.find(u=>u.id===gV('m_cuenta_reasig') && u.pendienteReasignar) : null; let lnForzar = false;
+  if(cuentaReasig){
+    const partes = String(m.colaborador).replace(/\s+/g,' ').trim().split(' '), previoId = m.usuarioId;
+    const cuenta = { ...cuentaReasig, nombre: partes.shift() || m.colaborador, apellido: partes.join(' '), empresa: cuentaReasig.empresa || m.empresa,
+      anteriorTitular: cuentaReasig.titularSalio || lnNombre(cuentaReasig), pendienteReasignar: false, titularSalio: '', sinCorreo: false };
+    usuarios = usuarios.map(u=>u.id===cuenta.id ? cuenta : u);
+    // Si la persona ya existía sin cuenta, se une con la cuenta
+    if(previoId && previoId!==cuenta.id && usuarios.some(u=>u.id===previoId && !u.correo)){
+      usuarios = usuarios.filter(u=>u.id!==previoId);
+      equipo = equipo.map(e=>e.usuarioId===previoId ? { ...e, usuarioId: cuenta.id } : e);
+      lineas = lineas.map(l=>l.usuarioId===previoId ? { ...l, usuarioId: cuenta.id } : l); lnForzar = true;
+    }
+    m.usuarioId = cuenta.id;
+    m.cuentaReasignada = { correo: cuenta.correo, anterior: cuenta.anteriorTitular };
+  }
   if(ent && !m.usuarioId){
     const correoActa = (m.cuentas||[]).find(c=>/correo/i.test(c.sistema||'') && /@/.test(c.usuario||''));
     const r = asegurarUsuario(m.colaborador, m.empresa, correoActa ? correoActa.usuario : '');
@@ -2247,6 +2283,11 @@ window.guardarMov = async function(tipo){
     if(liberar.size){
       m.lineasLiberadas = lineas.filter(l=>liberar.has(l.id)).map(l=>({id:l.id, linea:l.linea}));
       lineas = lineas.map(l=>liberar.has(l.id) ? lnLiberar(l, m.colaborador, m.numero) : l);
+    }
+    // La cuenta de correo queda lista para la persona nueva (cambio de nombre), con sus licencias
+    if(fichaSal && fichaSal.usuarioId && gRad('m_cuenta_sal')==='reasignar'){
+      usuarios = usuarios.map(u=>u.id===fichaSal.usuarioId ? { ...u, pendienteReasignar: true, titularSalio: m.colaborador, salidaActa: m.numero, salidaFecha: m.ultimoDia || m.fecha } : u);
+      m.cuentaPorReasignar = (usuarios.find(u=>u.id===fichaSal.usuarioId)||{}).correo || '';
     }
   }
   const btn = document.getElementById('btnGuardarActa'); btn.disabled = true; btn.textContent = 'Guardando…';
@@ -2284,7 +2325,7 @@ window.guardarMov = async function(tipo){
     });
   }
   movs = [...movs, m];
-  const lnCambio = lineas !== lnAntes, usCambio = usuarios !== usAntes;
+  const lnCambio = lineas !== lnAntes || lnForzar, usCambio = usuarios !== usAntes;
   if(usuarioCreado) enlazarEquiposPorNombre(usuarioCreado);
   const ok = (!usCambio || await Storage.set('usuarios', usuarios)) && await Storage.set('movimientos', movs) && await Storage.set('equipos', equipo) && await Storage.set('laptops_usadas', usadas) && (!lnCambio || await Storage.set('lineas', lineas));
   if(!ok){ equipo = eqAntes; usadas = luAntes; movs = mvAntes; lineas = lnAntes; usuarios = usAntes; btn.disabled=false; btn.textContent='Guardar y generar acta'; alert('No se pudo guardar. Revisa la conexión e intenta de nuevo.'); return; }
@@ -2372,7 +2413,7 @@ function renderUserTable(){
     return `<tr class="grupo"><td colspan="6">${esc((emp||'Sin empresa').toUpperCase())} &nbsp;·&nbsp; Gmail: ${us.filter(tieneGmail).length} &nbsp;·&nbsp; Dropbox: ${us.filter(tieneDropbox).length} &nbsp;·&nbsp; ${us.length} usuarios</td></tr>` +
     us.map(u=>`
     <tr>
-      <td><b>${esc(u.nombre)}</b></td>
+      <td><b>${esc(u.nombre)}</b>${u.pendienteReasignar ? ` <span class="tag rust" title="${esc(u.titularSalio||'')} salió${u.salidaActa?' (acta '+esc(u.salidaActa)+')':''}. La cuenta conserva sus licencias y espera a la persona nueva.">Por reasignar</span>` : ''}</td>
       <td>${esc(u.apellido)}</td>
       <td class="mono" style="font-size:11px;">${esc(u.correo)}</td>
       <td>${tieneGmail(u) ? `<span class="tag">${esc(planCorto(u.gmailPlan) || 'Sí')}</span>` : '—'}</td>
@@ -2521,6 +2562,10 @@ window.saveUser = async function(id, isEdit){
   if(!data.nombre){ alert('El nombre es obligatorio'); return; }
   if(!data.empresa){ alert('Elige la empresa'); return; }
   if(data.correo) data.sinCorreo = false;
+  const previoU = usuarios.find(u=>u.id===id);
+  if(previoU && previoU.pendienteReasignar && normNom(nomUsuario(data)) !== normNom(previoU.titularSalio || nomUsuario(previoU))){
+    data.pendienteReasignar = false; data.anteriorTitular = previoU.titularSalio || nomUsuario(previoU); data.titularSalio = '';
+  }
   const otro = duenoCorreo(data.correo, id);
   if(otro){
     const accion = gRad('u_accion');
