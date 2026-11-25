@@ -3397,7 +3397,9 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
   function perfilesDe(l) {
     const txt = ((l.nombre || '') + ' ' + (l.proveedor || '')).toLowerCase();
     const todos = g('usuarios') || [], us = todos.filter((u) => u.empresa === l.empresa);
-    if (/google|gmail|workspace/.test(txt)) { const gws = GW[l.empresa] || [l.empresa]; return { us: todos.filter((u) => gws.includes(u.googleWorkspace) && !/sin licencia/i.test(u.gmailPlan || '')), tipo: 'gmail' }; }
+    if (/google|gmail|workspace/.test(txt)) { const gws = GW[l.empresa] || [l.empresa]; return { us: todos.filter((u) => gws.includes(u.googleWorkspace) && !/sin licencia/i.test(u.gmailPlan || '')), tipo: 'gmail',
+      susp: todos.filter((u) => gws.includes(u.googleWorkspace) && u.estadoGoogle === 'Suspendida'),
+      sinLic: todos.filter((u) => gws.includes(u.googleWorkspace) && u.estadoGoogle === 'Activa' && /sin licencia/i.test(u.gmailPlan || '')) }; }
     if (/dropbox/.test(txt)) { const f = g('tieneDropbox'); return typeof f === 'function' ? { us: us.filter(f), tipo: 'dropbox' } : null; }
     return null;
   }
@@ -3438,6 +3440,8 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
         ${fil !== 'Grupo' ? `<div class="pf-col"><h5><span>Usuarios personales</span><span class="pf-chipcnt">${lp.length}</span></h5><div class="pf-list">${lp.map((u, i) => item(u, i, '#3F6FA3')).join('') || '<span class="pf-chipcnt">Sin resultados</span>'}</div></div>` : ''}
         ${fil !== 'Personal' ? `<div class="pf-col grp"><h5><span>Perfiles de grupo o de área</span><span class="pf-chipcnt">${lg.length}</span></h5><div class="pf-list">${lg.map((u, i) => item(u, i, '#F47B30')).join('') || '<span class="pf-chipcnt">Sin resultados</span>'}</div></div>` : ''}
       </div>
+      ${(P.susp || []).length || (P.sinLic || []).length ? `<div class="pf-col" style="margin-top:12px"><h5><span>Fuera de uso en la consola de Google</span><span class="pf-chipcnt">${(P.susp || []).length} suspendidas · ${(P.sinLic || []).length} activas sin licencia</span></h5>
+        <div class="pf-list">${[...(P.susp || []).map((u) => [u, 'Suspendida', '#B0512C']), ...(P.sinLic || []).map((u) => [u, 'Activa sin licencia', '#B98625'])].map(([u, est, col], i) => `<div class="pf-it" style="animation-delay:${i * 15}ms;opacity:.85"><span class="av" style="--c:${col}">${esc(ini(nombre(u)))}</span><div class="tx"><div class="nm" data-u="${esc(u.id)}">${esc(nombre(u))}</div><div class="pl">${esc(u.correo || '')} · <b style="color:${col}">${est}</b>${/tiene .* asignada/i.test(u.gmailPlan || '') ? ' · aún ocupa licencia' : ''}</div></div></div>`).join('')}</div></div>` : ''}
       ${dif > 0 || dups ? `<div class="pf-aviso">${dif > 0 ? `Hay <b>${dif}</b> perfil${dif === 1 ? '' : 'es'} más en uso que licencias contratadas. ` : ''}${dups ? `<b>${dups}</b> nombre${dups === 1 ? ' aparece' : 's aparecen'} repetido${dups === 1 ? '' : 's'}: revisa si son la misma cuenta.` : ''}</div>` : ''}
       <div style="margin-top:8px;font-size:11px;color:var(--ink-soft)">Personal = cuenta con nombre y apellido de una persona. Grupo = perfil con nombre de área o apodo (Recepción, Cobros, Legal…); ponle un alias y anota la persona a cargo (puede ser alguien de la lista o un apodo). “auto” = clasificado por el nombre; corrígelo con → Grupo / → Personal.</div>
     </div>`;
@@ -3480,7 +3484,7 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
       const per = P.us.filter((u) => tipoDe(u) === 'Personal').length, gru = P.us.length - per;
       const td = tr.children[3]; const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'pf-btn';
       bt.setAttribute('aria-expanded', S.abiertos.has(id)); bt.title = 'Ver los perfiles que usan esta licencia';
-      bt.innerHTML = `<span class="car">›</span>${P.us.length} <span class="pf-chipcnt">· ${per} pers · ${gru} grupo</span>`;
+      bt.innerHTML = `<span class="car">›</span>${P.us.length} <span class="pf-chipcnt">· ${per} pers · ${gru} grupo${(P.susp || []).length ? ' · ' + P.susp.length + ' susp.' : ''}</span>`;
       td.replaceChildren(bt);
       bt.onclick = () => { if (S.abiertos.has(id)) { S.abiertos.delete(id); const d = tr.nextElementSibling; if (d && d.classList.contains('pf-det')) d.remove(); bt.setAttribute('aria-expanded', 'false'); } else { S.abiertos.add(id); bt.setAttribute('aria-expanded', 'true'); pintarFila(l, tr, true); } };
       if (S.abiertos.has(id)) pintarFila(l, tr, false);
