@@ -3181,8 +3181,7 @@ async function init(){
         <div class="mes"><button type="button" id="r-prev" aria-label="Mes anterior">‹</button><b id="r-mesl"></b><button type="button" id="r-next" aria-label="Mes siguiente">›</button></div></div>
         <svg class="flow" id="r-flow" viewBox="0 0 620 260" role="img" aria-label="Entradas y salidas del mes"></svg><div class="chips" id="r-chips"></div></div>
         <div class="card"><h4>Salud del parque · Semah Monitor</h4><div id="r-rings"></div><div id="r-bars" style="margin-top:12px"></div></div></div>
-      <div class="sec"><h4>Pendientes</h4><div class="pend" id="r-pend"></div></div>
-      <div class="sec"><h4>Licencias por empresa · clic en una tarjeta para filtrar</h4></div>`;
+      <div class="sec"><h4>Pendientes</h4><div class="pend" id="r-pend"></div></div>`;
     v.insertBefore(box, v.firstChild);
     box.querySelector('#r-prev').onclick = () => { S.mes = addM(S.mes, -1); S.anim = true; pintar(); };
     box.querySelector('#r-next').onclick = () => { S.mes = addM(S.mes, 1); S.anim = true; pintar(); };
@@ -3660,10 +3659,10 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
     const box = document.getElementById('userStats'); if (!box) return;
     const us = g('usuarios') || [], EMP = g('EMPRESAS') || [], sel = (document.getElementById('userEmpresaFilter') || {}).value || '';
     box.className = 'us-dir';
-    box.innerHTML = `<div class="us-nota">Directorio para crear y editar personas y sus cuentas. Los totales de licencias Gmail y Dropbox, tal como están en cada consola, se ven en <a id="us-ir-lic">Resumen → Licencias</a>.</div>` +
+    box.innerHTML = `<div class="us-nota">Directorio de personas y sus cuentas. Arriba están las licencias por empresa tal como están en cada consola; <a id="us-ir-lic">ir a licencias</a>.</div>` +
       ['', ...EMP].map((e) => `<button type="button" data-e="${esc(e)}" aria-pressed="${sel === e}">${e ? esc(e) : 'Todas'}<span>${e ? us.filter((u) => u.empresa === e).length : us.length}</span></button>`).join('');
     box.querySelectorAll('button').forEach((b) => b.onclick = () => { const s = document.getElementById('userEmpresaFilter'); s.value = b.dataset.e; s.dispatchEvent(new Event('change')); });
-    box.querySelector('#us-ir-lic').onclick = () => { const t = document.querySelector('.tab[data-view="licencias"]'); if (t) t.click(); setTimeout(() => { const x = document.getElementById('licTbody'); if (x) x.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300); };
+    box.querySelector('#us-ir-lic').onclick = () => { const x = document.getElementById('licSeccion'); if (x) x.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   }
   function marcar() {   // cuentas suspendidas en Google: se ven así en la tabla
     const us = g('usuarios') || [];
@@ -3676,6 +3675,53 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
   }
   const wrap = (n, fn) => { const f = window[n]; if (typeof f !== 'function' || f.__us) return; const w = function () { const r = f.apply(this, arguments); try { fn(); } catch (e) {} return r; }; w.__us = true; window[n] = w; };
   const arrancar = () => { window.renderUserStats = function () { stats(); }; window.renderUserStats.__us = true; wrap('renderUserTable', marcar); try { stats(); marcar(); } catch (e) {} };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
+})();
+</script>
+
+<!-- ===== Semah IT · Licencias dentro de Usuarios (se puede quitar borrando este bloque) ===== -->
+<style id="semah-lic-usuarios">
+#licSeccion{margin:0 0 22px;padding-bottom:18px;border-bottom:2px solid var(--rule)}
+#licSeccion .ls-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+#licSeccion .ls-head h3{margin:0;font-size:16px}
+#licSeccion .ls-head span{font-size:12px;color:var(--ink-soft)}
+#dirTitulo{margin:4px 0 8px;font-size:16px}
+</style>
+<script id="semah-lic-usuarios-js">
+(() => {
+  // Las licencias (tarjetas por empresa + tabla + perfiles) viven en la pestaña Usuarios; Resumen queda como tablero.
+  function mover() {
+    const vl = document.getElementById('view-licencias'), vu = document.getElementById('view-usuarios');
+    if (!vl || !vu || document.getElementById('licSeccion')) return;
+    const stats = document.getElementById('licStats'); if (!stats) return;
+    const sec = document.createElement('div'); sec.id = 'licSeccion';
+    sec.innerHTML = '<div class="ls-head"><h3>Licencias por empresa</h3><span>Gmail y Dropbox tal como están en cada consola · clic en una empresa para filtrar licencias y usuarios</span></div>';
+    const ctr = stats.nextElementSibling, tabla = ctr && ctr.nextElementSibling;
+    sec.appendChild(stats); if (ctr && ctr.classList.contains('controls')) sec.appendChild(ctr); if (tabla && tabla.classList.contains('table-scroll')) sec.appendChild(tabla);
+    const tit = document.createElement('h3'); tit.id = 'dirTitulo'; tit.textContent = 'Usuarios';
+    vu.insertBefore(tit, vu.firstChild); vu.insertBefore(sec, vu.firstChild);
+  }
+  function enlazarFiltro() {   // al elegir empresa en licencias, la lista de usuarios se filtra igual
+    const f = window.filtrarLicEmpresa; if (typeof f !== 'function' || f.__lu) return;
+    const n = function (emp) { const r = f.apply(this, arguments); try { const l = document.getElementById('licEmpresaFilter'), u = document.getElementById('userEmpresaFilter'); if (l && u && u.value !== l.value && [...u.options].some((o) => o.value === l.value)) { u.value = l.value; u.dispatchEvent(new Event('change')); } } catch (e) {} return r; };
+    n.__lu = true; window.filtrarLicEmpresa = n;
+  }
+  function contarComoConsola() {   // Gmail de cada tarjeta = cuentas de su Google (consola), no solo por empresa de la persona
+    const f = window.resumenEmpresa; if (typeof f !== 'function' || f.__lu) return;
+    const g = (n) => { try { return eval(n); } catch (e) { return undefined; } };
+    const n = function (emp) {
+      const r = f.apply(this, arguments);
+      try {
+        const L = (g('licenses') || []).find((l) => /google|gmail|workspace/i.test((l.nombre || '') + ' ' + (l.proveedor || '')) && (l.empresa === emp || (l.empresasIncluidas || []).includes(emp)));
+        const uso = g('enUsoLic'); if (!L || typeof uso !== 'function') return r;
+        if (L.empresa === emp) r.gmail = uso(L);
+        else { const gws = L.empresa === 'SG. Investment' ? ['Semah', 'SG. Investment'] : [L.empresa]; r.gmail = (g('usuarios') || []).filter((u) => u.empresa === emp && gws.includes(u.googleWorkspace) && !/sin licencia/i.test(u.gmailPlan || '')).length; }
+      } catch (e) {}
+      return r;
+    };
+    n.__lu = true; window.resumenEmpresa = n;
+  }
+  const arrancar = () => { mover(); enlazarFiltro(); contarComoConsola(); try { const r = window.renderLicStats; if (typeof r === 'function') r(); } catch (e) {} };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
 })();
 </script>
