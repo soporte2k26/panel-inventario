@@ -3948,5 +3948,111 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
 })();
 </script>
 
+
+<!-- ===== Semah IT · Equipos de personas que ya no están pasan a Laptops libres (se puede quitar borrando este bloque) ===== -->
+<style id="semah-eqlibre">
+#eqHuerfanos{border:1px solid #d9a441;background:#fbf0d9;color:#5a3d00;padding:10px 12px;margin:0 0 12px;font-size:12.5px;line-height:1.5;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+#eqHuerfanos b{color:#3d2a00}
+#eqHuerfanos .eh-txt{flex:1 1 380px;min-width:0}
+#eqHuerfanos button{padding:4px 12px;font-size:12px}
+#eqTbody .eh-tag{display:inline-block;margin-left:6px;font-size:10.5px;padding:1px 7px;border-radius:999px;background:#fbf0d9;color:#8a5a00;font-weight:600}
+#eqTbody .eh-btn{margin-left:6px;padding:1px 8px;font-size:11px;box-shadow:none}
+</style>
+<script id="semah-eqlibre-js">
+(() => {
+  const g = (n) => { try { return eval(n); } catch (e) { return undefined; } };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const nomU = (u) => ((u.nombre || '') + ' ' + (u.apellido || '')).replace(/\s+/g, ' ').trim();
+  const hoy = () => new Date().toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  // Equipo asignado a alguien que ya no está en Usuarios (no compartido ni servidor)
+  function huerfanos() {
+    const us = g('usuarios') || [], ids = new Set(us.map((u) => u.id)), noms = new Set(us.map((u) => norm(nomU(u))));
+    return (g('equipo') || []).filter((e) => e.estado === 'Asignado' && !e.compartido && (e.usuario || '').trim() &&
+      !(e.usuarioId && ids.has(e.usuarioId)) && !noms.has(norm(e.usuario)) &&
+      !/^(equipo compartido|servidor)\b/.test(norm(e.usuario)) && !/servidor/i.test(e.tipo || '') &&
+      /\s/.test(e.usuario.trim()) && !/\b(call ?center|recepci|sucursal|ventas|caja|bodega)\b/.test(norm(e.usuario)));   // un solo nombre (CallCenter) es un perfil, no una persona
+  }
+
+  const aLibre = (e, procedencia) => ({
+    id: g('uid')('lu'), empresa: e.empresa || '', fabricante: e.fabricante || '', equipo: e.equipo || e.modelo || '', serie: e.serie || '',
+    procesador: e.procesador || '', ram: e.ram || '', disco: e.disco || '', ultimoUsuario: e.usuario || '',
+    procedencia, condicion: 'Por revisar',
+    notas: [!/laptop/i.test(e.tipo || '') && e.tipo ? `Tipo: ${e.tipo}` : '', e.placa ? `Placa ${e.placa}` : '', e.hostname ? `Windows: ${e.hostname}` : '', `Pasada a libres el ${hoy()}`].filter(Boolean).join('. '),
+  });
+
+  async function pasar(ids, procedencia) {
+    const eq = g('equipo') || [], sel = eq.filter((e) => ids.includes(e.id)); if (!sel.length) return false;
+    const nuevosEq = eq.filter((e) => !ids.includes(e.id)), nuevasLu = [...(g('usadas') || []), ...sel.map((e) => aLibre(e, procedencia))];
+    eval('equipo = nuevosEq'); eval('usadas = nuevasLu');
+    const S = g('Storage'); const ok = await S.set('equipos', nuevosEq) && await S.set('laptops_usadas', nuevasLu);
+    try { g('refreshEqUI')(); } catch (e) {} try { g('refreshLuUI')(); } catch (e) {}
+    try { g('registrarAcceso')('Equipo a libres', sel.map((e) => `${e.serie || e.equipo} (${e.usuario})`).join(', ')); } catch (e) {}
+    return ok;
+  }
+
+  function aviso() {
+    const vista = document.getElementById('view-equipos'); if (!vista) return;
+    let box = document.getElementById('eqHuerfanos');
+    const h = huerfanos();
+    if (!h.length) { if (box) box.remove(); return; }
+    if (!box) { box = document.createElement('div'); box.id = 'eqHuerfanos'; const ctr = vista.querySelector('.controls'); vista.insertBefore(box, ctr); }
+    box.innerHTML = `<div class="eh-txt"><b>${h.length} equipo${h.length > 1 ? 's' : ''} a nombre de personas que ya no están en Usuarios:</b> ${h.map((e) => `${esc(e.usuario)} (${esc(e.equipo || e.tipo || '')}${e.serie ? ' · ' + esc(e.serie) : ''})`).join(', ')}. Si ya no trabajan aquí, pásalos a Laptops libres. Si siguen trabajando, agrégalos en Usuarios.</div><button type="button" id="eh-todos">Pasar ${h.length > 1 ? 'todos' : ''} a libres</button>`;
+    box.querySelector('#eh-todos').onclick = async (ev) => {
+      if (!confirm(`¿Pasar a Laptops libres ${h.length} equipo(s)?\n\n${h.map((e) => '• ' + e.usuario + ' · ' + (e.equipo || '') + ' ' + (e.serie || '')).join('\n')}\n\nQuedan como “Por revisar”, con el nombre de la persona como último usuario.`)) return;
+      ev.target.disabled = true; if (await pasar(h.map((e) => e.id), 'Equipos activos · la persona ya no está')) { const t = g('toast'); if (t) t('Equipos pasados a Laptops libres ✓'); }
+    };
+  }
+
+  function marcar() {
+    const h = new Map(huerfanos().map((e) => [e.id, e]));
+    document.querySelectorAll('#eqTbody button[onclick^="editEq("]').forEach((b) => {
+      const id = (b.getAttribute('onclick').match(/editEq\('([^']+)'\)/) || [])[1]; const e = h.get(id); if (!e) return;
+      const td = b.closest('tr').children[0]; if (!td || td.dataset.eh) return; td.dataset.eh = '1';
+      td.insertAdjacentHTML('beforeend', `<span class="eh-tag" title="Esta persona no está en Usuarios">Ya no está</span><button class="eh-btn secondary" data-libre="${esc(id)}">Pasar a libres</button>`);
+      td.querySelector('[data-libre]').onclick = async (ev) => {
+        ev.stopPropagation();
+        if (!confirm(`¿Pasar ${e.equipo || 'el equipo'} (${e.serie || 'sin serie'}) de ${e.usuario} a Laptops libres?`)) return;
+        ev.target.disabled = true; if (await pasar([id], 'Equipos activos · la persona ya no está')) { const t = g('toast'); if (t) t('Pasado a Laptops libres ✓'); }
+      };
+    });
+    aviso();
+  }
+
+  // Al eliminar a alguien de Usuarios, sus equipos pasan a Laptops libres (antes quedaban a su nombre)
+  function nuevoDelUser() {
+    window.delUser = async function (id) {
+      const us = g('usuarios') || [], u = us.find((x) => x.id === id); if (!u) return;
+      const { eqs, lns } = g('cosasDeUsuario')(u), nom = g('nomUsuario')(u);
+      const eqsLibres = eqs.filter((e) => !e.compartido);
+      const det = [lns.length ? `• Línea(s) ${lns.map((l) => l.linea).join(', ')}: quedan asignadas solo en la línea a nombre de ${nom} (sin licencias).` : '',
+        eqsLibres.length ? `• ${eqsLibres.length} equipo(s) pasan a Laptops libres (“Por revisar”, último usuario ${nom}): ${eqsLibres.map((e) => e.equipo || e.tipo).join(', ')}.` : ''].filter(Boolean).join('\n');
+      if (!confirm(`¿Eliminar a ${nom}${u.correo ? ' (' + u.correo + ')' : ''} de Usuarios?` + (det ? '\n\n' + det : ''))) return;
+      const nuevosUs = us.filter((x) => x.id !== id);
+      const nuevasLn = lns.length ? (g('lineas') || []).map((l) => lns.some((x) => x.id === l.id) ? (({ usuarioId, usuarioNombre, usuarioEmpresa, ...r }) => ({ ...r, asignacionDirecta: true, asignadoA: nom, mapeo: 'Asignación directa' }))(l) : l) : null;
+      const S = g('Storage');
+      // primero los equipos (así el enlace al usuario no cambia por debajo), luego usuarios y líneas
+      let ok = !eqsLibres.length || await pasar(eqsLibres.map((e) => e.id), `Usuario eliminado (${nom})`);
+      eval('usuarios = nuevosUs'); if (nuevasLn) eval('lineas = nuevasLn');
+      if (ok) ok = await S.set('usuarios', nuevosUs) && (!nuevasLn || await S.set('lineas', nuevasLn));
+      try { g('refreshUserUI')(); } catch (e) {} if (nuevasLn) try { g('refreshLnUI')(); } catch (e) {}
+      if (ok) { const t = g('toast'); if (t) t(eqsLibres.length ? 'Usuario eliminado. Su equipo pasó a Laptops libres ✓' : 'Usuario eliminado'); }
+    };
+    window.delUser.__eh = true;
+  }
+
+  const arrancar = () => {
+    const f = window.renderEqTable;
+    if (typeof f === 'function' && !f.__eh) { const w = function () { const r = f.apply(this, arguments); try { marcar(); } catch (e) {} return r; }; w.__eh = true; window.renderEqTable = w; }
+    ['eqEstadoFilter','eqSearch'].forEach((k) => { const el = document.getElementById(k); if (el) el[k === 'eqSearch' ? 'oninput' : 'onchange'] = () => window.renderEqTable(); });
+    nuevoDelUser();
+    try { marcar(); } catch (e) {}
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(arrancar, 0)); else setTimeout(arrancar, 0);
+  setTimeout(() => { try { aviso(); } catch (e) {} }, 4000);   // los datos llegan después de cargar
+})();
+</script>
+
 </body>
 </html>
