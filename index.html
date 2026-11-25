@@ -2904,5 +2904,189 @@ async function init(){
 })();
 </script>
 
+<!-- ===== Semah IT · Pulso de movimientos (se puede quitar borrando este bloque) ===== -->
+<style id="semah-pulso">
+  #pulso{--p-ent:#2F6E63;--p-sal:#B0512C;--p-cam:#B98625;--p-act:#3F6FA3;margin-bottom:22px}
+  #pulso .p-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+  #pulso h3{margin:0;font-size:17px;font-weight:800;letter-spacing:-.01em}
+  #pulso .p-sub{font-size:12px;color:var(--ink-soft);margin-top:2px}
+  #pulso .p-mes{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid var(--rule);border-radius:10px;padding:3px}
+  #pulso .p-mes button{background:transparent;color:var(--ink);border:0;padding:4px 10px;box-shadow:none}
+  #pulso .p-mes b{min-width:130px;text-align:center;font-size:13px}
+  #pulso .p-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+  #pulso .p-chips button{background:#fff;color:var(--ink-soft);border:1px solid var(--rule);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600}
+  #pulso .p-chips button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+  #pulso .p-rings{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}
+  #pulso .ring{display:flex;gap:12px;align-items:center;background:linear-gradient(180deg,#fff,#fbf8f1);border:1px solid var(--rule);border-radius:14px;padding:12px 14px;cursor:pointer;transition:transform .25s var(--sm-ease),box-shadow .25s,border-color .25s;opacity:0;animation:smUp .5s var(--sm-ease) forwards}
+  #pulso .ring:hover,#pulso .ring[aria-pressed=true]{transform:translateY(-2px);box-shadow:var(--sm-shadow);border-color:var(--c)}
+  #pulso .ring svg{flex:0 0 64px}
+  #pulso .ring circle.bg{stroke:#ece5d3}
+  #pulso .ring circle.fg{stroke:var(--c);transition:stroke-dashoffset 1s var(--sm-ease)}
+  #pulso .ring .n{font-size:24px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  #pulso .ring .l{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-top:3px}
+  #pulso .ring .d{font-size:11.5px;margin-top:4px;color:var(--ink-soft)}
+  #pulso .up{color:var(--p-ent);font-weight:700}#pulso .down{color:var(--p-sal);font-weight:700}
+  #pulso .p-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:14px}
+  @media (max-width:860px){#pulso .p-grid{grid-template-columns:1fr}}
+  #pulso .card{background:#fff;border:1px solid var(--rule);border-radius:14px;padding:14px}
+  #pulso .card h4{margin:0 0 10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft)}
+  #pulso .p-chart{position:relative}
+  #pulso .p-chart rect.b{transform-box:fill-box;transform-origin:50% 100%;animation:barUp .6s var(--sm-ease) both;cursor:pointer}
+  #pulso .p-chart g.mes:hover rect.b{filter:brightness(1.12)}
+  #pulso .p-chart g.mes.sel rect.hl{fill:rgba(244,123,48,.10)}
+  #pulso .p-tip{position:absolute;pointer-events:none;background:var(--ink);color:#fff;border-radius:8px;padding:7px 10px;font-size:12px;opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s;white-space:nowrap;z-index:3}
+  #pulso .p-tip.on{opacity:1;transform:none}
+  #pulso .leg{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--ink-soft);margin-top:6px}
+  #pulso .leg i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  #pulso .emp{display:grid;grid-template-columns:110px 1fr 28px;gap:8px;align-items:center;font-size:12.5px;margin-bottom:8px;cursor:pointer;border-radius:8px;padding:2px 4px;transition:background .2s}
+  #pulso .emp:hover,#pulso .emp.sel{background:#f6f1e4}
+  #pulso .emp .trk{display:flex;height:10px;border-radius:5px;overflow:hidden;background:#efe9da}
+  #pulso .emp .trk span{height:100%;width:0;transition:width .9s var(--sm-ease)}
+  #pulso .kpi2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  #pulso .kpi2 > div{background:#fbf8f1;border:1px solid var(--rule);border-radius:10px;padding:10px}
+  #pulso .kpi2 b{display:block;font-size:20px;font-weight:800}
+  #pulso .kpi2 small{font-size:11px;color:var(--ink-soft)}
+  #pulso .bar2{height:6px;border-radius:3px;background:#efe9da;overflow:hidden;margin-top:6px}
+  #pulso .bar2 span{display:block;height:100%;width:0;transition:width 1s var(--sm-ease)}
+  #pulso .feed{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto}
+  #pulso .feed li{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:center;padding:8px;border-radius:10px;cursor:pointer;transition:background .2s,transform .2s;opacity:0;animation:smRow .4s var(--sm-ease) forwards}
+  #pulso .feed li:hover{background:#f6f1e4;transform:translateX(2px)}
+  #pulso .feed .ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:800;background:var(--c)}
+  #pulso .feed .t{font-weight:700;font-size:13px}#pulso .feed .s{font-size:11.5px;color:var(--ink-soft);grid-column:2}
+  #pulso .feed .st{font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;background:#efe9da;color:var(--ink-soft)}
+  #pulso .feed .st.pf{background:#f3e1d6;color:var(--p-sal)}
+  @keyframes barUp{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+</style>
+<script id="semah-pulso-js">
+(() => {
+  const TIPOS = [['Entrada', 'Entradas de personal', '--p-ent', 'ENT'], ['Salida', 'Salidas de personal', '--p-sal', 'SAL'], ['Cambio', 'Cambios de equipo', '--p-cam', 'CAM'], ['Activos', 'Entregas de activos', '--p-act', 'ACT']];
+  const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const S = { mes: null, emp: '', tipo: '' };
+  const g = (n) => { try { return eval(n); } catch (e) { return undefined; } };
+  const clase = (m) => { const f = g('claseActa'); if (typeof f === 'function') { try { return f(m); } catch (e) {} } const p = (m.numero || '').slice(0, 3); return { ENT: 'Entrada', SAL: 'Salida', CAM: 'Cambio', ACT: 'Activos' }[p] || m.tipo; };
+  const ym = (d) => (d || '').slice(0, 7);
+  const addM = (k, n) => { const [y, m] = k.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+  const nomMes = (k, corto) => { const t = new Date(k + '-15T12:00:00').toLocaleDateString('es-PA', corto ? { month: 'short' } : { month: 'long', year: 'numeric' }); return t; };
+  const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const css = (v) => getComputedStyle(document.getElementById('pulso')).getPropertyValue(v).trim();
+  function datos() { const mv = g('movs'); return Array.isArray(mv) ? mv : []; }
+  function montar() {
+    const v = document.getElementById('view-movs'); if (!v || document.getElementById('pulso')) return;
+    const box = document.createElement('div'); box.id = 'pulso';
+    box.innerHTML = `<div class="p-head"><div><h3>Pulso de movimientos</h3><div class="p-sub" id="p-sub"></div></div>
+      <div class="p-mes"><button type="button" id="p-prev" aria-label="Mes anterior">‹</button><b id="p-mesl"></b><button type="button" id="p-next" aria-label="Mes siguiente">›</button></div></div>
+      <div class="p-chips" id="p-chips"></div><div class="p-rings" id="p-rings"></div>
+      <div class="p-grid"><div class="card"><h4>Últimos 6 meses</h4><div class="p-chart" id="p-chart"></div>
+        <div class="leg">${TIPOS.map((t) => `<span><i style="background:var(${t[2]})"></i>${t[1]}</span>`).join('')}</div></div>
+        <div class="card"><h4>Por empresa · <span id="p-empmes"></span></h4><div id="p-emps"></div><div class="kpi2" id="p-kpi2"></div></div></div>
+      <div class="card" style="margin-top:14px"><h4 id="p-feedt">Actas del mes</h4><ul class="feed" id="p-feed"></ul></div>`;
+    v.insertBefore(box, v.firstChild);
+    box.querySelector('#p-prev').onclick = () => { S.mes = addM(S.mes, -1); pintar(true); };
+    box.querySelector('#p-next').onclick = () => { S.mes = addM(S.mes, 1); pintar(true); };
+  }
+  function pintar(anim) {
+    montar(); const all = datos(); if (!document.getElementById('pulso')) return;
+    if (!S.mes) S.mes = new Date().toISOString().slice(0, 7);
+    const ant = addM(S.mes, -1);
+    const deEmp = (m) => !S.emp || (m.empresa || '') === S.emp;
+    const mesL = all.filter((m) => ym(m.fecha) === S.mes && deEmp(m)), antL = all.filter((m) => ym(m.fecha) === ant && deEmp(m));
+    const empresas = [...new Set(all.map((m) => m.empresa).filter(Boolean))].sort();
+    document.getElementById('p-mesl').textContent = cap(nomMes(S.mes));
+    document.getElementById('p-sub').textContent = `${mesL.length} actas en ${nomMes(S.mes)}${S.emp ? ' · ' + S.emp : ''} · ${antL.length} el mes anterior`;
+    // chips de empresa
+    const ch = document.getElementById('p-chips'); ch.replaceChildren();
+    ['', ...empresas].forEach((e) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = e || 'Todas las empresas'; b.setAttribute('aria-pressed', S.emp === e); b.onclick = () => { S.emp = e; pintar(true); }; ch.appendChild(b); });
+    // anillos
+    const rg = document.getElementById('p-rings'); rg.replaceChildren(); const tot = Math.max(1, mesL.length);
+    TIPOS.forEach(([k, lbl, c], i) => {
+      const n = mesL.filter((m) => clase(m) === k).length, a = antL.filter((m) => clase(m) === k).length, pct = Math.round(n / tot * 100);
+      const d = a ? Math.round((n - a) / a * 100) : null, R = 26, L = 2 * Math.PI * R;
+      const el = document.createElement('div'); el.className = 'ring'; el.style.setProperty('--c', `var(${c})`); el.style.animationDelay = (anim && !quieto ? i * 70 : 0) + 'ms'; el.setAttribute('role', 'button'); el.setAttribute('aria-pressed', S.tipo === k); el.tabIndex = 0;
+      el.innerHTML = `<svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true"><circle class="bg" cx="32" cy="32" r="${R}" fill="none" stroke-width="7"/><circle class="fg" cx="32" cy="32" r="${R}" fill="none" stroke-width="7" stroke-linecap="round" transform="rotate(-90 32 32)" stroke-dasharray="${L}" stroke-dashoffset="${L}"/><text x="32" y="36" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">${pct}%</text></svg>
+        <div><div class="n">${n}</div><div class="l">${lbl}</div><div class="d">${d === null ? (a === 0 && n ? 'nuevo este mes' : 'sin datos del mes anterior') : (d === 0 ? `<span>= igual</span> que ${nomMes(ant, true)} (${a})` : `<span class="${(d > 0) !== (k === 'Salida') ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'} ${Math.abs(d)}%</span> vs ${nomMes(ant, true)} (${a})`)}</div></div>`;
+      el.onclick = () => { S.tipo = S.tipo === k ? '' : k; pintar(false); };
+      el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.onclick(); } };
+      rg.appendChild(el); const fg = el.querySelector('.fg'); requestAnimationFrame(() => requestAnimationFrame(() => { fg.style.strokeDashoffset = L * (1 - pct / 100); }));
+    });
+    chart(all, deEmp, anim); empresasMes(all, empresas, anim); kpis(all, deEmp); feed(mesL, anim);
+  }
+  function chart(all, deEmp, anim) {
+    const box = document.getElementById('p-chart'), meses = Array.from({ length: 6 }, (_, i) => addM(S.mes, i - 5));
+    const W = Math.max(300, box.clientWidth), H = 190, ml = 26, mb = 22, mt = 10;
+    const val = meses.map((k) => TIPOS.map(([t]) => all.filter((m) => ym(m.fecha) === k && deEmp(m) && clase(m) === t).length));
+    const max = Math.max(1, ...val.flat()), gw = (W - ml) / meses.length, bw = Math.min(16, (gw - 14) / 4);
+    const y = (v) => H - mb - (v / max) * (H - mb - mt);
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="Actas por mes y tipo">`;
+    [0, .5, 1].forEach((p) => { const v = Math.round(max * p); s += `<line x1="${ml}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="#ece5d3"/><text x="${ml - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="#5B6B72">${v}</text>`; });
+    meses.forEach((k, i) => {
+      const x0 = ml + i * gw, sel = k === S.mes; s += `<g class="mes${sel ? ' sel' : ''}" data-k="${k}"><rect class="hl" x="${x0 + 2}" y="${mt - 4}" width="${gw - 4}" height="${H - mb - mt + 4}" rx="8" fill="transparent"/>`;
+      TIPOS.forEach(([t, , c], j) => { const v = val[i][j]; if (S.tipo && S.tipo !== t) return; const bx = x0 + (gw - 4 * bw - 9) / 2 + j * (bw + 3); s += `<rect class="b" x="${bx}" y="${y(v)}" width="${bw}" height="${Math.max(v ? 2 : 0, H - mb - y(v))}" rx="3" fill="${css(c)}" style="animation-delay:${anim && !quieto ? i * 60 + j * 25 : 0}ms${anim && !quieto ? '' : ';animation:none'}"/>`; });
+      s += `<text x="${x0 + gw / 2}" y="${H - 6}" text-anchor="middle" font-size="11" font-weight="${sel ? 700 : 400}" fill="${sel ? '#22303A' : '#5B6B72'}">${nomMes(k, true)}</text></g>`;
+    });
+    box.innerHTML = s + '</svg><div class="p-tip" id="p-tip"></div>';
+    const tip = box.querySelector('#p-tip');
+    box.querySelectorAll('g.mes').forEach((gEl, i) => {
+      gEl.addEventListener('pointermove', (ev) => { const bb = box.getBoundingClientRect(); tip.innerHTML = `<b>${nomMes(meses[i])}</b><br>` + TIPOS.map(([t, l], j) => `${l}: ${val[i][j]}`).join('<br>'); tip.classList.add('on'); tip.style.left = Math.min(ev.clientX - bb.left + 12, bb.width - 190) + 'px'; tip.style.top = '6px'; });
+      gEl.addEventListener('pointerleave', () => tip.classList.remove('on'));
+      gEl.addEventListener('click', () => { S.mes = meses[i]; pintar(true); });
+    });
+  }
+  function empresasMes(all, empresas, anim) {
+    document.getElementById('p-empmes').textContent = nomMes(S.mes);
+    const box = document.getElementById('p-emps'); box.replaceChildren();
+    const filas = empresas.map((e) => ({ e, v: TIPOS.map(([t]) => all.filter((m) => ym(m.fecha) === S.mes && m.empresa === e && clase(m) === t).length) })).filter((f) => f.v.some(Boolean));
+    if (!filas.length) { box.innerHTML = '<p style="font-size:12.5px;color:var(--ink-soft)">Sin actas en este mes.</p>'; return; }
+    const max = Math.max(...filas.map((f) => f.v.reduce((a, b) => a + b, 0)));
+    filas.forEach((f) => {
+      const r = document.createElement('div'); r.className = 'emp' + (S.emp === f.e ? ' sel' : ''); const tot = f.v.reduce((a, b) => a + b, 0);
+      r.innerHTML = `<span>${esc(f.e)}</span><div class="trk">${TIPOS.map(([, l, c], j) => `<span title="${l}: ${f.v[j]}" style="background:var(${c})" data-w="${f.v[j] / max * 100}"></span>`).join('')}</div><b style="text-align:right">${tot}</b>`;
+      r.onclick = () => { S.emp = S.emp === f.e ? '' : f.e; pintar(true); }; box.appendChild(r);
+      requestAnimationFrame(() => requestAnimationFrame(() => r.querySelectorAll('.trk span').forEach((sp) => sp.style.width = sp.dataset.w + '%')));
+    });
+  }
+  function kpis(all, deEmp) {
+    const desde = addM(S.mes, -2), rango = (m) => ym(m.fecha) >= desde && ym(m.fecha) <= S.mes && deEmp(m);
+    const ing = all.filter((m) => rango(m) && clase(m) === 'Entrada' && /ingreso/i.test(m.motivo || '') && m.fechaIngreso);
+    const ok1 = ing.filter((m) => (m.fecha || '') < m.fechaIngreso).length;
+    const sal = all.filter((m) => rango(m) && clase(m) === 'Salida' && m.avisoRRHH && m.cierreIT);
+    const ok2 = sal.filter((m) => (new Date(m.cierreIT) - new Date(m.avisoRRHH)) / 36e5 <= 24).length;
+    const us = (g('usuarios') || []).filter((u) => !S.emp || u.empresa === S.emp).length;
+    const salMes = all.filter((m) => ym(m.fecha) === S.mes && deEmp(m) && clase(m) === 'Salida').length;
+    const pc = (a, b) => b ? Math.round(a / b * 100) : null;
+    const box = document.getElementById('p-kpi2');
+    const k = (t, a, b, sub, color) => { const p = pc(a, b); return `<div><small>${t}</small><b>${p === null ? '—' : p + '%'}</b><small>${sub}</small><div class="bar2"><span style="background:${color}" data-w="${p ?? 0}"></span></div></div>`; };
+    box.innerHTML = k('Onboarding antes del día 1', ok1, ing.length, `${ok1} de ${ing.length} · últimos 3 meses`, 'var(--p-ent)') +
+      k('Offboarding en menos de 24 h', ok2, sal.length, `${ok2} de ${sal.length} · últimos 3 meses`, 'var(--p-sal)') +
+      `<div style="grid-column:1/-1"><small>Rotación del mes</small><b>${us ? (salMes / us * 100).toFixed(1) + '%' : '—'}</b><small>${salMes} salidas sobre ${us} usuarios${S.emp ? ' de ' + esc(S.emp) : ''}</small></div>`;
+    requestAnimationFrame(() => requestAnimationFrame(() => box.querySelectorAll('.bar2 span').forEach((sp) => sp.style.width = sp.dataset.w + '%')));
+  }
+  function feed(mesL, anim) {
+    const ul = document.getElementById('p-feed'); ul.replaceChildren();
+    const lst = mesL.filter((m) => !S.tipo || clase(m) === S.tipo).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    document.getElementById('p-feedt').textContent = (S.tipo ? (TIPOS.find((t) => t[0] === S.tipo) || [])[1] : 'Actas') + ' de ' + nomMes(S.mes) + ' · ' + lst.length;
+    if (!lst.length) { ul.innerHTML = '<li style="opacity:1;cursor:default;color:var(--ink-soft)">Sin actas para este filtro.</li>'; return; }
+    lst.forEach((m, i) => {
+      const t = TIPOS.find((x) => x[0] === clase(m)) || TIPOS[0]; const li = document.createElement('li'); li.style.setProperty('--c', `var(${t[2]})`); li.style.animationDelay = (anim && !quieto ? Math.min(i, 12) * 35 : 0) + 'ms';
+      li.innerHTML = `<span class="ic">${t[3]}</span><span class="t">${esc(m.colaborador || '—')} <span style="font-weight:400;color:var(--ink-soft)">· ${esc(m.numero || '')}</span></span><span class="st${m.pendienteFirma ? ' pf' : ''}">${m.pendienteFirma ? 'Por firmar' : 'Firmada'}</span><span class="s">${esc(m.empresa || '')} · ${esc(m.motivo || '')} · ${esc(m.fecha || '')}</span>`;
+      li.title = 'Ver en la tabla de actas';
+      li.onclick = () => { const q = document.getElementById('movSearch'); if (q) { q.value = m.numero || ''; q.dispatchEvent(new Event('input', { bubbles: true })); q.scrollIntoView({ behavior: quieto ? 'auto' : 'smooth', block: 'center' }); } };
+      ul.appendChild(li);
+    });
+  }
+  // engancharse al render original de Entradas y salidas
+  const enganchar = () => {
+    if (typeof window.renderMovStats !== 'function') return false;
+    const orig = window.renderMovStats; if (orig.__pulso) return true;
+    const nuevo = function () { const r = orig.apply(this, arguments); try { pintar(!document.getElementById('pulso')); } catch (e) { console.warn('Pulso:', e); } return r; };
+    nuevo.__pulso = true; window.renderMovStats = nuevo; return true;
+  };
+  const arrancar = () => { enganchar(); try { if (datos().length) pintar(true); } catch (e) {} };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
+  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { try { if (document.getElementById('pulso')) pintar(false); } catch (e) {} }, 200); });
+  document.addEventListener('click', (e) => { const t = e.target.closest('.tab'); if (t && t.dataset.view === 'movs') setTimeout(() => { try { pintar(true); } catch (e) {} }, 30); });
+})();
+</script>
+
 </body>
 </html>
