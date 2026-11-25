@@ -568,7 +568,7 @@ function resumenEmpresa(emp){
   // Solo cuentan personas con licencia (Gmail o Dropbox); las líneas y personas sin cuenta no suman
   const us = usuarios.filter(u=>u.empresa===emp && (tieneGmail(u) || tieneDropbox(u)));
   const eqs = equipo.filter(x=>x.empresa===emp);
-  const lics = licenses.filter(l=>l.empresa===emp);
+  const lics = licenses.filter(l=>l.empresa===emp || (l.empresasIncluidas||[]).includes(emp));
   const contratadas = re => lics.filter(l=>re.test(((l.nombre||'')+' '+(l.proveedor||'')).toLowerCase())).reduce((a,l)=>a+(parseInt(l.asientos)||0),0);
   return {
     usuarios: us.length, gmail: us.filter(tieneGmail).length, dropbox: us.filter(tieneDropbox).length,
@@ -604,13 +604,13 @@ function renderLicTable(){
   const q = document.getElementById('licSearch').value.trim().toLowerCase();
   const tbody = document.getElementById('licTbody');
   const rows = licenses.filter(l=>{
-    if(empresaF && l.empresa !== empresaF) return false;
+    if(empresaF && l.empresa !== empresaF && !(l.empresasIncluidas||[]).includes(empresaF)) return false;
     if(q && !((l.nombre||'').toLowerCase().includes(q) || (l.proveedor||'').toLowerCase().includes(q))) return false;
     return true;
   });
   const grupos = empresaF ? [empresaF] : [...EMPRESAS, ...[...new Set(rows.map(l=>l.empresa))].filter(e=>!EMPRESAS.includes(e))];
   tbody.innerHTML = grupos.map(emp=>{
-    const ls = rows.filter(l=>l.empresa===emp).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+    const ls = rows.filter(l=>l.empresa===emp || (empresaF && (l.empresasIncluidas||[]).includes(emp))).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
     const r = resumenEmpresa(emp);
     const cab = `<tr class="grupo"><td colspan="9">${esc((emp||'Sin empresa').toUpperCase())} &nbsp;·&nbsp; ${r.equipos} equipos &nbsp;·&nbsp; ${r.usuarios} usuarios con licencia &nbsp;·&nbsp; Gmail ${r.gmail}/${r.gmailContr} &nbsp;·&nbsp; Dropbox ${r.dropbox}/${r.dropboxContr}</td></tr>`;
     if(!ls.length) return (q ? '' : cab + `<tr><td colspan="9" class="empty" style="padding:14px;">Sin licencias registradas para ${esc(emp)}. Usa “+ Nueva licencia”.</td></tr>`);
@@ -3395,6 +3395,13 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
   // Google: la cuenta cuenta en la licencia del Workspace donde vive (campo googleWorkspace), igual que en Revisión
   const GW = { 'SG. Investment': ['Semah', 'SG. Investment'] };
   function perfilesDe(l) {
+    const P0 = perfilesDe0(l); if (!P0) return P0;
+    const sel = (document.getElementById('licEmpresaFilter') || {}).value || '';
+    if (!sel || !(l.empresasIncluidas || []).includes(sel)) return P0;
+    const f = (a) => (a || []).filter((u) => u.empresa === sel);
+    return { ...P0, us: f(P0.us), susp: f(P0.susp), sinLic: f(P0.sinLic), soloEmpresa: sel };
+  }
+  function perfilesDe0(l) {
     const txt = ((l.nombre || '') + ' ' + (l.proveedor || '')).toLowerCase();
     const todos = g('usuarios') || [], us = todos.filter((u) => u.empresa === l.empresa);
     if (/google|gmail|workspace/.test(txt)) { const gws = GW[l.empresa] || [l.empresa]; return { us: todos.filter((u) => gws.includes(u.googleWorkspace) && !/sin licencia/i.test(u.gmailPlan || '')), tipo: 'gmail',
@@ -3429,9 +3436,9 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
     };
     const lp = ver(per), lg = ver(gru), tot = P.us.length || 1;
     const dups = Object.values(cnt).filter((n) => n > 1).length;
-    const dif = contr ? P.us.length - contr : null;
+    const dif = contr && !P.soloEmpresa ? P.us.length - contr : null;
     return `<div class="pf-wrap">
-      <div class="pf-top"><div class="pf-leg"><span style="--c:#3F6FA3"><b>${per.length}</b>usuarios personales</span><span style="--c:#F47B30"><b>${gru.length}</b>perfiles de grupo (${gru.filter((u) => u.responsableId || u.responsableNombre).length} con persona a cargo)</span><span style="--c:#cfc6ad"><b>${P.us.length}</b>en uso de ${contr || '—'} contratadas</span></div>
+      <div class="pf-top"><div class="pf-leg"><span style="--c:#3F6FA3"><b>${per.length}</b>usuarios personales</span><span style="--c:#F47B30"><b>${gru.length}</b>perfiles de grupo (${gru.filter((u) => u.responsableId || u.responsableNombre).length} con persona a cargo)</span><span style="--c:#cfc6ad"><b>${P.us.length}</b>${P.soloEmpresa ? `de ${esc(P.soloEmpresa)} · licencia compartida de ${contr || '—'} para ${esc((l.empresasIncluidas || []).join(', '))}` : `en uso de ${contr || '—'} contratadas`}</span></div>
         <div class="pf-split" aria-hidden="true"><i style="background:#3F6FA3" data-w="${per.length / tot * 100}"></i><i style="background:#F47B30" data-w="${gru.length / tot * 100}"></i></div></div>
       <datalist id="pf-personas-${esc(l.id)}">${personas.map((x) => `<option value="${esc(nombre(x))}">`).join('')}</datalist>
       <div class="pf-tools"><input type="text" class="pf-q" placeholder="Buscar perfil, correo o plan…" value="${esc(S.q[l.id] || '')}">
@@ -3497,7 +3504,7 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
   };
   const engancharUso = () => {
     if (typeof window.enUsoLic !== 'function' || window.enUsoLic.__pf) return;
-    const n = function (l) { const P = perfilesDe(l); return P ? P.us.length : null; }; n.__pf = true; window.enUsoLic = n;
+    const n = function (l) { const P = perfilesDe0(l); return P ? P.us.length : null; }; n.__pf = true; window.enUsoLic = n;
   };
   const arrancar = () => { engancharUso(); enganchar(); try { decorar(); } catch (e) {} };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
