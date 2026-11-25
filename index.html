@@ -3640,5 +3640,45 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
 })();
 </script>
 
+<!-- ===== Semah IT · Usuarios como directorio (se puede quitar borrando este bloque) ===== -->
+<style id="semah-usuarios">
+#userStats.us-dir{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:12px}
+#userStats.us-dir .us-nota{flex:1 1 100%;font-size:12.5px;color:var(--ink-soft);margin-bottom:2px}
+#userStats.us-dir .us-nota a{color:#B0512C;font-weight:600;cursor:pointer;text-decoration:underline}
+#userStats.us-dir button{border:1px solid var(--rule);background:#fff;color:var(--ink);border-radius:999px;padding:4px 12px;font-size:12px;font-weight:600;box-shadow:none}
+#userStats.us-dir button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+#userStats.us-dir button span{color:var(--ink-soft);font-weight:400;margin-left:4px}
+#userStats.us-dir button[aria-pressed=true] span{color:#ddd}
+.tag.us-susp{background:#f3e1d6;color:#B0512C}
+</style>
+<script id="semah-usuarios-js">
+(() => {
+  const g = (n) => { try { return eval(n); } catch (e) { return undefined; } };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Usuarios = directorio para crear y editar personas. Los totales de licencias viven en Resumen (por consola de Google).
+  function stats() {
+    const box = document.getElementById('userStats'); if (!box) return;
+    const us = g('usuarios') || [], EMP = g('EMPRESAS') || [], sel = (document.getElementById('userEmpresaFilter') || {}).value || '';
+    box.className = 'us-dir';
+    box.innerHTML = `<div class="us-nota">Directorio para crear y editar personas y sus cuentas. Los totales de licencias Gmail y Dropbox, tal como están en cada consola, se ven en <a id="us-ir-lic">Resumen → Licencias</a>.</div>` +
+      ['', ...EMP].map((e) => `<button type="button" data-e="${esc(e)}" aria-pressed="${sel === e}">${e ? esc(e) : 'Todas'}<span>${e ? us.filter((u) => u.empresa === e).length : us.length}</span></button>`).join('');
+    box.querySelectorAll('button').forEach((b) => b.onclick = () => { const s = document.getElementById('userEmpresaFilter'); s.value = b.dataset.e; s.dispatchEvent(new Event('change')); });
+    box.querySelector('#us-ir-lic').onclick = () => { const t = document.querySelector('.tab[data-view="licencias"]'); if (t) t.click(); setTimeout(() => { const x = document.getElementById('licTbody'); if (x) x.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300); };
+  }
+  function marcar() {   // cuentas suspendidas en Google: se ven así en la tabla
+    const us = g('usuarios') || [];
+    document.querySelectorAll('#userTbody button[onclick^="editUser("]').forEach((b) => {
+      const id = (b.getAttribute('onclick').match(/editUser\('([^']+)'\)/) || [])[1]; const u = us.find((x) => x.id === id); if (!u) return;
+      const td = b.closest('tr').children[3]; if (!td || td.dataset.us) return; td.dataset.us = '1';
+      if (u.estadoGoogle === 'Suspendida') td.innerHTML = '<span class="tag us-susp" title="Cuenta suspendida en la consola de Google">Suspendida</span>';
+      else if (u.estadoGoogle === 'Activa' && /sin licencia/i.test(u.gmailPlan || '')) td.innerHTML = '<span class="tag" title="Activa en Google, sin licencia asignada">Activa sin licencia</span>';
+    });
+  }
+  const wrap = (n, fn) => { const f = window[n]; if (typeof f !== 'function' || f.__us) return; const w = function () { const r = f.apply(this, arguments); try { fn(); } catch (e) {} return r; }; w.__us = true; window[n] = w; };
+  const arrancar = () => { window.renderUserStats = function () { stats(); }; window.renderUserStats.__us = true; wrap('renderUserTable', marcar); try { stats(); marcar(); } catch (e) {} };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
+})();
+</script>
+
 </body>
 </html>
