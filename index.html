@@ -3322,5 +3322,163 @@ async function init(){
 })();
 </script>
 
+<!-- ===== Semah IT · Perfiles por licencia (se puede quitar borrando este bloque) ===== -->
+<style id="semah-perfiles">
+.pf-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rule);background:#fff;color:var(--ink);border-radius:999px;padding:2px 10px 2px 8px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;box-shadow:none}
+.pf-btn:hover{border-color:#F47B30}
+.pf-btn .car{transition:transform .25s;display:inline-block}
+.pf-btn[aria-expanded=true] .car{transform:rotate(90deg)}
+tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
+.pf-wrap{padding:14px 16px 16px;animation:pfIn .35s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pfIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.pf-top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.pf-split{display:flex;height:10px;border-radius:6px;overflow:hidden;background:#efe9da;flex:1 1 240px;max-width:420px}
+.pf-split i{display:block;height:100%;width:0;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.pf-leg{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-soft)}
+.pf-leg b{color:var(--ink);font-size:15px;margin-right:3px}
+.pf-leg span::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--c);vertical-align:0}
+.pf-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.pf-tools input{flex:1 1 200px;font-size:12.5px;padding:6px 10px}
+.pf-tools button{font-size:12px;padding:5px 11px}
+.pf-tools button[aria-pressed=true]{background:var(--ink);color:#fff}
+.pf-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.pf-col{min-width:0}
+@media(max-width:820px){.pf-cols{grid-template-columns:1fr}}
+.pf-col h5{margin:0 0 8px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between}
+.pf-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px}
+.pf-it{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--rule);border-radius:10px;padding:6px 8px;font-size:12.5px;min-width:0;animation:pfIn .3s both}
+.pf-it .av{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:10.5px;font-weight:800;color:#fff;background:var(--c)}
+.pf-it{flex-wrap:wrap}.pf-it .tx{min-width:0;flex:1}
+.pf-it select.rsp{flex:1 1 100%;width:100%;min-width:0;max-width:100%;box-sizing:border-box;font-size:11.5px;padding:3px 6px;margin:2px 0 0 34px;border-radius:7px;flex-basis:calc(100% - 34px);width:auto!important;min-width:0!important}
+.pf-col.grp .pf-list{grid-template-columns:1fr}
+.pf-col.grp .pf-it{flex-wrap:nowrap}
+.pf-col.grp select.rsp{flex:0 1 230px!important;margin:0!important}
+.pf-it .pl.mj{color:#B98625;font-weight:600;white-space:normal}
+.pf-it .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.pf-it .nm:hover{text-decoration:underline}
+.pf-it .pl{font-size:11px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-it .dup{color:#B0512C;font-weight:700}
+.pf-it button.sw{flex:none;font-size:10.5px;padding:2px 7px;border-radius:999px;border:1px solid var(--rule);background:#fff;color:var(--ink-soft);box-shadow:none}
+.pf-it button.sw:hover{border-color:#F47B30;color:var(--ink)}
+.pf-aviso{margin-top:10px;font-size:12px;color:#8A4B00;background:#FFF3BF;border-radius:8px;padding:7px 10px}
+.pf-chipcnt{font-size:11px;color:var(--ink-soft);font-weight:600}
+@media(prefers-reduced-motion:reduce){.pf-wrap,.pf-it{animation:none}.pf-split i{transition:none}}
+</style>
+<script id="semah-perfiles-js">
+(() => {
+  const g = (n) => { try { return eval(n); } catch (e) { return undefined; } };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const sinAc = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  // Palabras que delatan un perfil de grupo o de área (no una persona)
+  const CLAVES = ['recepcion', 'backup', 'respaldo', 'cobros', 'departamento', 'marketing', 'mercadeo', 'telemercadeo', 'legal', 'promotora', 'ventanilla', 'proveedores', 'ventas', 'administracion', 'contabilidad', 'compras', 'tesoreria', 'facturacion', 'info', 'soporte', 'rrhh', 'recursos humanos', 'gerencia', 'operaciones', 'seguridad', 'mantenimiento', 'atencion', 'servicio', 'reservas', 'citas', 'notificaciones', 'noreply', 'no-reply', 'it', 'sistemas', 'bodega', 'almacen', 'caja', 'cotizaciones', 'clientes', 'panama', 'general', 'oficina', 'equipo', 'grupo', 'semah group'];
+  const EMP_NOMBRES = ['haus', 'almacenajes', 'colinas', 'sg investment', 'sg. investment', 'semah', 'semah properties', 'docusafe', 'coronado mall', 't. storage', 'tocumen storage'];
+  const S = { abiertos: new Set(), q: {}, f: {} };
+
+  function esGrupoAuto(u) {
+    const n = sinAc(u.nombre), a = sinAc(u.apellido), full = (n + ' ' + a).trim();
+    const pal = full.split(/[^a-z0-9]+/).filter(Boolean);
+    if (CLAVES.some((k) => k.includes(' ') ? full.includes(k) : pal.includes(k))) return true;
+    if (EMP_NOMBRES.includes(n) || EMP_NOMBRES.includes(a)) return true;
+    return false;
+  }
+  const tipoDe = (u) => u.tipoCuenta === 'Grupo' ? 'Grupo' : u.tipoCuenta === 'Personal' ? 'Personal' : (esGrupoAuto(u) ? 'Grupo' : 'Personal');
+  const manual = (u) => u.tipoCuenta === 'Grupo' || u.tipoCuenta === 'Personal';
+  const nombre = (u) => { const f = g('nomUsuario'); if (typeof f === 'function') { try { return f(u); } catch (e) {} } return ((u.nombre || '') + ' ' + (u.apellido || '')).trim(); };
+  const ini = (t) => sinAc(t).split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '·';
+
+  function perfilesDe(l) {
+    const txt = ((l.nombre || '') + ' ' + (l.proveedor || '')).toLowerCase();
+    const us = (g('usuarios') || []).filter((u) => u.empresa === l.empresa);
+    if (/google|gmail|workspace/.test(txt)) { const f = g('tieneGmail'); return typeof f === 'function' ? { us: us.filter(f), tipo: 'gmail' } : null; }
+    if (/dropbox/.test(txt)) { const f = g('tieneDropbox'); return typeof f === 'function' ? { us: us.filter(f), tipo: 'dropbox' } : null; }
+    return null;
+  }
+  const planTxt = (u, tipo) => tipo === 'gmail' ? (String(u.gmailPlan || '').replace(/\s*\d[\d.,]*\s*(\/.*)?(anual|por año).*$/i, '').replace(/activa licencia/i, '').trim() || 'Plan sin anotar') : 'Dropbox';
+
+  function detalle(l, tr) {
+    const P = perfilesDe(l); if (!P) return null;
+    const contr = parseInt(l.asientos) || 0;
+        const cnt = {}; P.us.forEach((u) => { const k = sinAc(nombre(u)); cnt[k] = (cnt[k] || 0) + 1; });
+    const per = P.us.filter((u) => tipoDe(u) === 'Personal'), gru = P.us.filter((u) => tipoDe(u) === 'Grupo');
+    const q = sinAc(S.q[l.id] || ''), fil = S.f[l.id] || '';
+    const ver = (arr) => arr.filter((u) => !q || sinAc(nombre(u) + ' ' + (u.correo || '') + ' ' + (u.gmailPlan || '')).includes(q)).sort((a, b) => nombre(a).localeCompare(nombre(b), 'es'));
+    const todos = (g('usuarios') || []).filter((x) => x.empresa === l.empresa);
+    const personas = todos.filter((x) => tipoDe(x) === 'Personal').sort((a, b) => nombre(a).localeCompare(nombre(b), 'es'));
+    const maneja = (u) => todos.filter((x) => tipoDe(x) === 'Grupo' && x.responsableId === u.id).map(nombre);
+    const item = (u, i, col) => {
+      const nm = nombre(u), dup = cnt[sinAc(nm)] > 1, grp = tipoDe(u) === 'Grupo';
+      const extra = grp ? `<select class="rsp" data-u="${esc(u.id)}" title="Quién maneja este perfil"><option value="">¿Quién lo maneja? · sin asignar</option>${personas.map((x) => `<option value="${esc(x.id)}" ${u.responsableId === x.id ? 'selected' : ''}>Lo maneja ${esc(nombre(x))}</option>`).join('')}</select>`
+        : (maneja(u).length ? `<div class="pl mj">También maneja: ${esc(maneja(u).join(', '))}</div>` : '');
+      return `<div class="pf-it" style="animation-delay:${Math.min(i, 30) * 12}ms"><span class="av" style="--c:${col}">${esc(ini(nm))}</span>
+        <div class="tx"><div class="nm" data-u="${esc(u.id)}" title="Abrir ${esc(nm)}">${esc(nm)}</div><div class="pl">${esc(u.correo || planTxt(u, P.tipo))}${dup ? ' · <span class="dup">repetido</span>' : ''}${manual(u) ? '' : ' · auto'}</div>${extra}</div>
+        <button type="button" class="sw" data-u="${esc(u.id)}" data-t="${tipoDe(u) === 'Grupo' ? 'Personal' : 'Grupo'}" title="Marcar como ${tipoDe(u) === 'Grupo' ? 'usuario personal' : 'perfil de grupo'}">${tipoDe(u) === 'Grupo' ? '→ Personal' : '→ Grupo'}</button></div>`;
+    };
+    const lp = ver(per), lg = ver(gru), tot = P.us.length || 1;
+    const dups = Object.values(cnt).filter((n) => n > 1).length;
+    const dif = contr ? P.us.length - contr : null;
+    return `<div class="pf-wrap">
+      <div class="pf-top"><div class="pf-leg"><span style="--c:#3F6FA3"><b>${per.length}</b>usuarios personales</span><span style="--c:#F47B30"><b>${gru.length}</b>perfiles de grupo (${gru.filter((u) => u.responsableId).length} con responsable)</span><span style="--c:#cfc6ad"><b>${P.us.length}</b>en uso de ${contr || '—'} contratadas</span></div>
+        <div class="pf-split" aria-hidden="true"><i style="background:#3F6FA3" data-w="${per.length / tot * 100}"></i><i style="background:#F47B30" data-w="${gru.length / tot * 100}"></i></div></div>
+      <div class="pf-tools"><input type="text" class="pf-q" placeholder="Buscar perfil, correo o plan…" value="${esc(S.q[l.id] || '')}">
+        ${[['', 'Todos'], ['Personal', 'Solo personales'], ['Grupo', 'Solo grupo']].map(([k, t]) => `<button type="button" class="secondary pf-f" data-f="${k}" aria-pressed="${fil === k}">${t}</button>`).join('')}</div>
+      <div class="pf-cols" style="${fil ? 'grid-template-columns:1fr' : ''}">
+        ${fil !== 'Grupo' ? `<div class="pf-col"><h5><span>Usuarios personales</span><span class="pf-chipcnt">${lp.length}</span></h5><div class="pf-list">${lp.map((u, i) => item(u, i, '#3F6FA3')).join('') || '<span class="pf-chipcnt">Sin resultados</span>'}</div></div>` : ''}
+        ${fil !== 'Personal' ? `<div class="pf-col grp"><h5><span>Perfiles de grupo o de área</span><span class="pf-chipcnt">${lg.length}</span></h5><div class="pf-list">${lg.map((u, i) => item(u, i, '#F47B30')).join('') || '<span class="pf-chipcnt">Sin resultados</span>'}</div></div>` : ''}
+      </div>
+      ${dif > 0 || dups ? `<div class="pf-aviso">${dif > 0 ? `Hay <b>${dif}</b> perfil${dif === 1 ? '' : 'es'} más en uso que licencias contratadas. ` : ''}${dups ? `<b>${dups}</b> nombre${dups === 1 ? ' aparece' : 's aparecen'} repetido${dups === 1 ? '' : 's'}: revisa si son la misma cuenta.` : ''}</div>` : ''}
+      <div style="margin-top:8px;font-size:11px;color:var(--ink-soft)">Personal = cuenta con nombre y apellido de una persona. Grupo = perfil con nombre de área o apodo (Recepción, Cobros, Legal…); elige quién lo maneja. “auto” = clasificado por el nombre; corrígelo con → Grupo / → Personal.</div>
+    </div>`;
+  }
+
+  function pintarFila(l, tr, anim) {
+    let det = tr.nextElementSibling; if (!det || !det.classList.contains('pf-det')) { det = document.createElement('tr'); det.className = 'pf-det'; det.innerHTML = '<td colspan="9"></td>'; tr.after(det); }
+    const html = detalle(l, tr); if (!html) return;
+    const td = det.firstElementChild; td.innerHTML = html; if (!anim) td.querySelectorAll('.pf-wrap,.pf-it').forEach((x) => x.style.animation = 'none');
+    requestAnimationFrame(() => requestAnimationFrame(() => td.querySelectorAll('.pf-split i').forEach((i) => i.style.width = i.dataset.w + '%')));
+    const qi = td.querySelector('.pf-q'); qi.oninput = () => { S.q[l.id] = qi.value; const pos = qi.selectionStart; pintarFila(l, tr, false); const n = tr.nextElementSibling.querySelector('.pf-q'); n.focus(); n.setSelectionRange(pos, pos); };
+    td.querySelectorAll('.pf-f').forEach((b) => b.onclick = () => { S.f[l.id] = b.dataset.f; pintarFila(l, tr, true); });
+    td.querySelectorAll('.nm').forEach((n) => n.onclick = () => { const f = g('editUser'); if (typeof f === 'function') f(n.dataset.u); });
+    td.querySelectorAll('.sw').forEach((b) => b.onclick = () => guardar(b.dataset.u, { tipoCuenta: b.dataset.t }, b, b.dataset.t === 'Grupo' ? 'Marcado como perfil de grupo ✓' : 'Marcado como usuario personal ✓'));
+    td.querySelectorAll('.rsp').forEach((sl) => sl.onchange = () => guardar(sl.dataset.u, { responsableId: sl.value || null }, sl, sl.value ? 'Responsable asignado ✓' : 'Responsable quitado ✓'));
+  }
+
+  async function guardar(id, cambio, btn, msg) {
+    if (g('readOnly')) { alert('Sin conexión con la base de datos: no se puede guardar.'); return; }
+    btn.disabled = true; if (btn.tagName === 'BUTTON') btn.textContent = 'Guardando…';
+    const St = g('Storage');
+    try {
+      const nuevos = (g('usuarios') || []).map((u) => u.id === id ? { ...u, ...cambio } : u);
+      eval('usuarios = nuevos');
+      const ok = await St.set('usuarios', nuevos);
+      const t = g('toast'); if (typeof t === 'function') t(ok ? msg : '⚠ No se guardó');
+    } catch (e) { alert('No se pudo guardar.'); }
+    const r = g('renderLicTable'); if (typeof r === 'function') r();
+  }
+
+  function decorar() {
+    const tb = document.getElementById('licTbody'); if (!tb) return;
+    const lics = g('licenses') || [];
+    tb.querySelectorAll('button[onclick^="editLic("]').forEach((b) => {
+      const id = (b.getAttribute('onclick').match(/editLic\('([^']+)'\)/) || [])[1]; const l = lics.find((x) => x.id === id); if (!l) return;
+      const tr = b.closest('tr'); const P = perfilesDe(l); if (!P || tr.dataset.pf) return; tr.dataset.pf = '1';
+      const per = P.us.filter((u) => tipoDe(u) === 'Personal').length, gru = P.us.length - per;
+      const td = tr.children[3]; const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'pf-btn';
+      bt.setAttribute('aria-expanded', S.abiertos.has(id)); bt.title = 'Ver los perfiles que usan esta licencia';
+      bt.innerHTML = `<span class="car">›</span>${P.us.length} <span class="pf-chipcnt">· ${per} pers · ${gru} grupo</span>`;
+      td.replaceChildren(bt);
+      bt.onclick = () => { if (S.abiertos.has(id)) { S.abiertos.delete(id); const d = tr.nextElementSibling; if (d && d.classList.contains('pf-det')) d.remove(); bt.setAttribute('aria-expanded', 'false'); } else { S.abiertos.add(id); bt.setAttribute('aria-expanded', 'true'); pintarFila(l, tr, true); } };
+      if (S.abiertos.has(id)) pintarFila(l, tr, false);
+    });
+  }
+  const enganchar = () => {
+    const f = window.renderLicTable; if (typeof f !== 'function' || f.__pf) return;
+    const n = function () { const r = f.apply(this, arguments); try { decorar(); } catch (e) { console.warn('Perfiles:', e); } return r; };
+    n.__pf = true; window.renderLicTable = n;
+  };
+  const arrancar = () => { enganchar(); try { decorar(); } catch (e) {} };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
+})();
+</script>
+
 </body>
 </html>
