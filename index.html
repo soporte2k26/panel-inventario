@@ -3190,13 +3190,13 @@ async function init(){
 
   function hero() {
     const eq = arr('equipo'), us = arr('usuarios'), ln = arr('lineas'), lu = arr('usadas');
-    const tieneG = g('tieneGmail'); const CL = S.extra.lista; const corr = CL ? CL.filter((c) => c.estado === 'Activa').length : (typeof tieneG === 'function' ? us.filter(tieneG).length : 0);
+    const tieneG = g('tieneGmail'); const corr = typeof tieneG === 'function' ? us.filter(tieneG).length : 0;   // igual que las consolas de Google
     const tipos = {}; eq.forEach((e) => { const t = e.tipo || 'Otro'; tipos[t] = (tipos[t] || 0) + 1; });
     const tipoTxt = Object.entries(tipos).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, n]) => `${t} ${n}`).join(' · ');
     const emps = new Set(us.map((u) => u.empresa).filter(Boolean)).size;
     const renov = ln.filter((l) => (l.accion || 'Renovar') === 'Renovar').length;
     const K = [['Equipos activos', eq.length, tipoTxt, 'equipos'], ['Usuarios', us.length, `en ${plural(emps, 'empresa', 'empresas')}`, 'usuarios'],
-      ['Correos activos', corr, S.extra.correos != null ? `${fmt.format(S.extra.correos)} antiguos para limpiar` : 'con licencia de correo', 'usuarios'],
+      ['Correos activos', corr, 'con licencia en Google' + (S.extra.correos ? ` · ${fmt.format(S.extra.correos)} de exempleados en historial` : ''), 'usuarios'],
       ['Líneas celulares', ln.length, `${renov} a renovar`, 'lineas']];
     if (S.extra.ipads != null) K.push(['iPads y tablets', S.extra.ipads, 'registradas', 'equipos']);
     K.push(['Laptops libres', lu.length, 'listas para reasignar', 'usadas']);
@@ -3258,7 +3258,7 @@ async function init(){
     const EMP = arr('EMPRESAS'), eq = arr('equipo'), us = arr('usuarios'), mv = arr('movs').filter((m) => ym(m.fecha) === S.mes);
     const tieneG = g('tieneGmail');
     const box = document.getElementById('r-emps'); box.replaceChildren();
-    EMP.map((e) => ({ e, eq: eq.filter((x) => x.empresa === e).length, us: us.filter((u) => u.empresa === e).length, co: S.extra.lista ? S.extra.lista.filter((c) => c.empresa === e && c.estado === 'Activa').length : (typeof tieneG === 'function' ? us.filter((u) => u.empresa === e && tieneG(u)).length : 0),
+    EMP.map((e) => ({ e, eq: eq.filter((x) => x.empresa === e).length, us: us.filter((u) => u.empresa === e).length, co: typeof tieneG === 'function' ? us.filter((u) => u.empresa === e && tieneG(u)).length : 0,
       v: ['Entrada', 'Salida', 'Cambio', 'Activos'].map((k) => mv.filter((m) => m.empresa === e && clase(m) === k).length) }))
       .sort((a, b) => b.eq - a.eq).forEach((r, i) => {
         const net = r.v[0] - r.v[1], tot = r.v.reduce((a, b) => a + b, 0);
@@ -3282,7 +3282,7 @@ async function init(){
     const lnAl = g('lnAlerta'); const venc = typeof lnAl === 'function' ? arr('lineas').filter((l) => { try { return ['Vencida', 'Renovar ya'].includes(lnAl(l)); } catch (e) { return false; } }).length : 0;
     const P = [[rev, 'En Revisión', 'diferencias por corregir', '#B0512C', '!', 'revision'], [pf, 'Actas por firmar', 'entradas, salidas, cambios y activos', '#B98625', '✎', 'movs'],
       [venc, 'Líneas por renovar ya', 'vencidas o en los próximos 30 días', '#3F6FA3', '☎', 'lineas'], [ln, 'Líneas por cancelar', 'marcadas para cancelar o no renovar', '#5B6B72', '✕', 'lineas']];
-    if (S.extra.correos) P.push([S.extra.correos, 'Correos antiguos', 'candidatos a limpiar', '#7A6A55', '@', 'usuarios']);
+    // Los correos antiguos son historial de exempleados (ya transferidos y fuera de las consolas): no son pendientes
     const box = document.getElementById('r-pend'); box.replaceChildren();
     P.forEach(([n, t, s, c, ic, tab], i) => { const el = document.createElement('div'); el.className = 'p' + (S.anim ? ' in' : ''); el.style.animationDelay = i * 50 + 'ms'; el.innerHTML = `<div class="ic" style="background:${c}">${ic}</div><div><b>0</b><span>${esc(t)} · ${esc(s)}</span></div>`; el.onclick = () => irTab(tab); box.appendChild(el); contar(el.querySelector('b'), n, 700); });
   }
