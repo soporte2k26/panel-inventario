@@ -3500,5 +3500,134 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
 })();
 </script>
 
+<!-- ===== Semah IT · Sincronización con Semah Monitor y MeshCentral (se puede quitar borrando este bloque) ===== -->
+<style id="semah-sync">
+#syncBox{margin:0 0 18px}
+#syncBox .sy-head{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+#syncBox h3{margin:0;font-size:15px}
+#syncBox .sy-sub{font-size:12px;color:var(--ink-soft);margin-top:2px}
+#syncBox .sy-flow{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--ink-soft);flex-wrap:wrap}
+#syncBox .sy-flow b{background:#fff;border:1px solid var(--rule);border-radius:999px;padding:3px 10px;color:var(--ink)}
+#syncBox .sy-flow i{font-style:normal;color:#F47B30;animation:syPulse 1.6s ease-in-out infinite}
+@keyframes syPulse{50%{opacity:.35}}
+#syncBox .sy-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px}
+@media(max-width:860px){#syncBox .sy-grid{grid-template-columns:1fr}}
+#syncBox .sy-card{background:#fff;border:1px solid var(--rule);border-radius:14px;padding:12px 14px}
+#syncBox .sy-card h4{margin:0 0 8px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between}
+#syncBox ul{list-style:none;margin:0;padding:0;max-height:360px;overflow:auto}
+#syncBox li{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:start;padding:8px 2px;border-top:1px solid #efe9da;font-size:12.5px;animation:sySlide .35s cubic-bezier(.2,.8,.2,1) both}
+#syncBox li:first-child{border-top:0}
+@keyframes sySlide{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+#syncBox .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:800}
+#syncBox .t{font-weight:600;color:var(--ink)}
+#syncBox .s{font-size:11.5px;color:var(--ink-soft);margin-top:1px}
+#syncBox .dh{text-decoration:line-through;opacity:.55}
+#syncBox li button{font-size:11px;padding:3px 9px;white-space:nowrap}
+#syncBox .vacio{font-size:12.5px;color:var(--ink-soft);padding:6px 0}
+#syncBox .fil{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+#syncBox .fil button{font-size:11.5px;padding:3px 10px}
+#syncBox .fil button[aria-pressed=true]{background:var(--ink);color:#fff}
+@media(prefers-reduced-motion:reduce){#syncBox li{animation:none}#syncBox .sy-flow i{animation:none}}
+</style>
+<script id="semah-sync-js">
+(() => {
+  const g = (n) => { try { return eval(n); } catch (e) { return undefined; } };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const S = { log: [], lic: [], f: '' };
+  const CAMPO = { hostname: 'Nombre de Windows', fabricante: 'Fabricante', equipo: 'Modelo' };
+  const ICON = { tecnico: ['#3F6FA3', '⇄'], nuevo: ['#2F6E63', '+'], aviso: ['#B0512C', '!'] };
+  const RES = { nueva: ['#B98625', 'Licencia nueva'], reutilizada: ['#2F6E63', 'Asiento libre reutilizado'], sin_licencia_registrada: ['#B0512C', 'Sin licencia registrada'] };
+
+  async function leer(key) {   // lee sin dejar la clave en el aviso de "otra persona guardó cambios"
+    const St = g('Storage'); if (!St) return [];
+    const v = await St.get(key, []); try { delete window.__ver[key]; } catch (e) {} return Array.isArray(v) ? v : [];
+  }
+  async function guardar(key, val) {
+    const St = g('Storage'); await St.get(key, []);           // versión fresca
+    const ok = await St.set(key, val); try { delete window.__ver[key]; } catch (e) {} return ok;
+  }
+  async function cargar() { [S.log, S.lic] = await Promise.all([leer('sync_log'), leer('licencias_nuevas')]); pintar(); }
+
+  function montar() {
+    const v = document.getElementById('view-revision'); if (!v) return null;
+    let box = document.getElementById('syncBox'); if (box) return box;
+    box = document.createElement('div'); box.id = 'syncBox';
+    box.innerHTML = `<div class="sy-head"><div><h3>Sincronización con Semah Monitor y MeshCentral</h3>
+        <div class="sy-sub">NexoIT manda en personas, empresas y licencias · MeshCentral manda en nombre de equipo y hardware. Cada guardado se envía al instante; además se revisa cada 5 min.</div></div>
+        <div class="sy-flow"><b>NexoIT</b><i>⇄</i><b>Semah Monitor</b><i>⇄</i><b>MeshCentral</b></div></div>
+      <div class="sy-grid"><div class="sy-card"><h4><span>Cambios que llegaron desde MeshCentral</span><span id="sy-n1"></span></h4>
+          <div class="fil">${[['', 'Todos'], ['nuevo', 'Equipos nuevos'], ['tecnico', 'Datos técnicos'], ['aviso', 'Avisos']].map(([k, t]) => `<button type="button" class="secondary" data-f="${k}">${t}</button>`).join('')}</div>
+          <ul id="sy-log"></ul></div>
+        <div class="sy-card"><h4><span>Licencias Gmail / Dropbox asignadas</span><span id="sy-n2"></span></h4><ul id="sy-lic"></ul></div></div>`;
+    const ref = v.querySelector('#revStats'); v.insertBefore(box, ref);
+    box.querySelectorAll('.fil button').forEach((b) => b.onclick = () => { S.f = b.dataset.f; pintar(); });
+    return box;
+  }
+
+  function pintar() {
+    if (!montar()) return;
+    document.querySelectorAll('#syncBox .fil button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.f === S.f));
+    const eqs = g('equipo') || [];
+    const L = S.log.filter((x) => !S.f || x.tipo === S.f).slice(0, 120);
+    document.getElementById('sy-n1').textContent = S.log.length ? S.log.length + ' registrados' : '';
+    document.getElementById('sy-log').innerHTML = L.map((x, i) => {
+      const [c, ic] = ICON[x.tipo] || ['#5B6B72', '·'];
+      const eq = eqs.find((e) => e.id === x.equipoId);
+      const quien = eq ? [eq.usuario, eq.empresa].filter(Boolean).join(' · ') : [x.usuario, x.empresa].filter(Boolean).join(' · ');
+      let t, s;
+      if (x.tipo === 'tecnico') { t = `${esc(CAMPO[x.campo] || x.campo)}: ${x.antes ? esc(x.antes) + ' → ' : ''}<b>${esc(x.despues)}</b>`; s = `Serie ${esc(x.serie)}${quien ? ' · ' + esc(quien) : ''}`; }
+      else { t = esc(x.texto || ''); s = `Serie ${esc(x.serie)}${quien ? ' · ' + esc(quien) : ''}`; }
+      const puede = !x.deshecho && (x.tipo === 'nuevo' ? !!eq : x.tipo === 'tecnico' && !!eq);
+      const btn = x.tipo === 'aviso' ? '' : (x.deshecho ? '<span class="s">Deshecho</span>' : (puede ? `<button type="button" class="secondary" data-id="${esc(x.id)}" title="${x.tipo === 'nuevo' ? 'Quitar este equipo de NexoIT (no se volverá a agregar)' : 'Volver al valor anterior y no dejar que MeshCentral lo cambie otra vez'}">Deshacer</button>` : (x.tipo === 'nuevo' && eq ? '' : '')));
+      return `<li style="animation-delay:${Math.min(i, 20) * 25}ms"><span class="ic" style="background:${c}">${ic}</span><div class="${x.deshecho ? 'dh' : ''}"><div class="t">${t}</div><div class="s">${s} · ${esc(x.fecha)} · ${esc(x.origen || '')}</div></div>${btn}</li>`;
+    }).join('') || '<li class="vacio" style="display:block">Aún no hay cambios desde MeshCentral.</li>';
+    document.getElementById('sy-n2').textContent = S.lic.filter((x) => x.resultado === 'nueva' && !x.deshecho).length + ' nuevas';
+    document.getElementById('sy-lic').innerHTML = S.lic.slice(0, 80).map((x, i) => {
+      const [c, lbl] = RES[x.resultado] || ['#5B6B72', x.resultado];
+      const btn = x.resultado === 'nueva' && !x.deshecho ? `<button type="button" class="secondary" data-lic="${esc(x.id)}" title="Si en realidad se reutilizó una cuenta, baja 1 a las contratadas">No era nueva</button>` : (x.deshecho ? '<span class="s">Corregido</span>' : '');
+      return `<li style="animation-delay:${Math.min(i, 20) * 25}ms"><span class="ic" style="background:${c}">${x.servicio === 'Dropbox' ? 'DB' : 'G'}</span><div class="${x.deshecho ? 'dh' : ''}"><div class="t">${esc(lbl)} · ${esc(x.usuario)}</div><div class="s">${esc(x.servicio)} de ${esc(x.empresa)} · ${x.contratadas != null ? `${x.en_uso} en uso de ${x.contratadas}` : 'sin licencia en NexoIT'}${x.acta ? ' · ' + esc(x.acta) : ''} · ${esc(x.fecha)}</div></div>${btn}</li>`;
+    }).join('') || '<li class="vacio" style="display:block">Aún no se han asignado licencias desde que se activó la sincronización.</li>';
+    document.querySelectorAll('#sy-log button[data-id]').forEach((b) => b.onclick = () => deshacer(b.dataset.id, b));
+    document.querySelectorAll('#sy-lic button[data-lic]').forEach((b) => b.onclick = () => noEraNueva(b.dataset.lic, b));
+  }
+
+  async function deshacer(id, btn) {
+    const x = S.log.find((y) => y.id === id); if (!x) return;
+    const eqs = g('equipo') || []; const eq = eqs.find((e) => e.id === x.equipoId); if (!eq) return;
+    const msg = x.tipo === 'nuevo' ? `¿Quitar ${x.serie} de Equipos activos? No se volverá a agregar desde MeshCentral.` : `¿Volver ${CAMPO[x.campo] || x.campo} a “${x.antes || '(vacío)'}” y bloquear ese dato para que MeshCentral no lo cambie otra vez?`;
+    if (!confirm(msg)) return;
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    let nuevos;
+    if (x.tipo === 'nuevo') nuevos = eqs.filter((e) => e.id !== eq.id);
+    else nuevos = eqs.map((e) => e.id !== eq.id ? e : { ...e, [x.campo]: x.antes || '', syncBloqueo: [...new Set([...(e.syncBloqueo || []), x.campo])] });
+    eval('equipo = nuevos');
+    const ok = await g('Storage').set('equipos', nuevos);
+    if (!ok) { btn.disabled = false; btn.textContent = 'Deshacer'; return; }
+    try { const r = g('refreshEqUI'); if (typeof r === 'function') r(); } catch (e) {}
+    S.log = (await leer('sync_log')).map((y) => y.id === id ? { ...y, deshecho: true } : y);
+    await guardar('sync_log', S.log); const t = g('toast'); if (typeof t === 'function') t('Deshecho ✓'); pintar();
+  }
+
+  async function noEraNueva(id, btn) {
+    const x = S.lic.find((y) => y.id === id); if (!x) return;
+    if (!confirm(`¿Bajar 1 la licencia de ${x.servicio} de ${x.empresa}? Úsalo si ${x.usuario} reutilizó una cuenta o asiento que ya existía.`)) return;
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    const re = x.servicio === 'Dropbox' ? /dropbox/i : /google|gmail|workspace/i;
+    const lics = (g('licenses') || []).map((l) => (l.empresa === x.empresa && re.test((l.nombre || '') + ' ' + (l.proveedor || ''))) ? { ...l, asientos: String(Math.max(0, (parseInt(l.asientos) || 0) - 1)), notas: ((l.notas || '') + ` · −1 el ${new Date().toLocaleDateString('es-PA')} (${x.usuario} no era licencia nueva)`).replace(/^ · /, '') } : l);
+    eval('licenses = lics');
+    const ok = await g('Storage').set('licencias', lics);
+    if (!ok) { btn.disabled = false; btn.textContent = 'No era nueva'; return; }
+    try { const r = g('refreshLicUI'); if (typeof r === 'function') r(); } catch (e) {}
+    S.lic = (await leer('licencias_nuevas')).map((y) => y.id === id ? { ...y, deshecho: true } : y);
+    await guardar('licencias_nuevas', S.lic); const t = g('toast'); if (typeof t === 'function') t('Licencia corregida ✓'); pintar();
+  }
+
+  const arrancar = () => { setTimeout(() => { if (g('Storage')) cargar().catch(() => {}); }, 3000); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
+  document.addEventListener('click', (e) => { const t = e.target.closest('.tab'); if (t && t.dataset.view === 'revision') cargar().catch(() => {}); });
+  setInterval(() => { if (!document.hidden && document.getElementById('syncBox') && document.getElementById('view-revision').style.display !== 'none') cargar().catch(() => {}); }, 60000);
+})();
+</script>
+
 </body>
 </html>
