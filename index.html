@@ -2800,5 +2800,109 @@ async function init(){
   else setSync('ok','● Conectado a la nube');
 }
 </script>
+<!-- ===== Semah IT · capa de movimiento y presentación v3 (se puede quitar borrando este bloque) ===== -->
+<style id="semah-motion">
+  :root{--haus-orange:#F47B30;--sm-ease:cubic-bezier(.2,.8,.2,1);--sm-shadow:0 10px 28px rgba(34,48,58,.12)}
+  /* pestañas con indicador deslizante */
+  .tabs{position:relative;gap:4px}
+  .tab{transition:background .25s,color .25s,border-color .25s,transform .2s;border-radius:10px 10px 0 0}
+  .tab:hover:not(.active){background:#efe9da;color:var(--ink);transform:translateY(-1px)}
+  .tab-ind{position:absolute;top:0;height:3px;border-radius:3px 3px 0 0;background:var(--haus-orange);transition:left .35s var(--sm-ease),width .35s var(--sm-ease),top .35s var(--sm-ease);z-index:2;pointer-events:none}
+  .panel{border-radius:0 14px 14px 14px;box-shadow:0 18px 44px rgba(0,0,0,.28)}
+  .sm-view{animation:smFade .38s var(--sm-ease) both}
+  /* indicadores como tarjetas */
+  .stats{gap:12px;border:none;flex-wrap:wrap}
+  .stat{flex:1 1 150px;border:1px solid var(--rule)!important;border-radius:12px;background:linear-gradient(180deg,#fff,#fbf8f1);position:relative;overflow:hidden;transition:transform .25s var(--sm-ease),box-shadow .25s,border-color .25s}
+  .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--haus-orange);opacity:.85}
+  .stat:hover{transform:translateY(-2px);box-shadow:var(--sm-shadow);border-color:#d9cfb4!important}
+  .stat.lic-card.sel{background:linear-gradient(180deg,#fff4ea,#fbf1e6);border-color:var(--haus-orange)!important}
+  .sm-in{animation:smUp .5s var(--sm-ease) both}
+  /* tablas */
+  .table-scroll{border-radius:12px}
+  tbody tr.sm-row{animation:smRow .42s var(--sm-ease) both}
+  td{transition:background .18s}
+  /* botones y campos */
+  button{transition:transform .15s,box-shadow .2s,opacity .2s,background .2s;border-radius:8px}
+  button:hover{opacity:1;transform:translateY(-1px);box-shadow:0 6px 16px rgba(34,48,58,.18)}
+  button:active{transform:translateY(0) scale(.97);box-shadow:none}
+  select,input[type=text],input[type=email],input[type=password],textarea{border-radius:8px!important;transition:border-color .2s,box-shadow .2s}
+  select:focus,input:focus,textarea:focus{outline:none;border-color:var(--haus-orange)!important;box-shadow:0 0 0 3px rgba(244,123,48,.18)}
+  .tag{border-radius:999px;padding:2px 9px}
+  /* ventanas */
+  .overlay.show{animation:smFadeIn .2s ease both;backdrop-filter:blur(2px)}
+  .overlay.show .modal{animation:smPop .32s var(--sm-ease) both;border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.35)}
+  .toast{border-radius:10px;transition:opacity .25s,transform .3s var(--sm-ease);transform:translate(-50%,12px)}
+  .toast.show{transform:translate(-50%,0)}
+  #gateBox *{font-family:var(--sans)!important}
+  #gateBox h2{font-weight:800;letter-spacing:-.02em}
+  #gateBox{border-radius:16px;box-shadow:0 30px 70px rgba(0,0,0,.45);animation:smPop .55s var(--sm-ease) both}
+  .masthead h1{animation:smUp .6s var(--sm-ease) both}
+  .logos-grupo{animation:smUp .6s .12s var(--sm-ease) both;border-radius:10px!important}
+  .logos-grupo img{transition:transform .25s var(--sm-ease)}
+  .logos-grupo img:hover{transform:scale(1.06)}
+  .sm-pulse{animation:smPulse .9s ease}
+  @keyframes smFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @keyframes smUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  @keyframes smRow{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+  @keyframes smFadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes smPop{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes smPulse{0%{background:rgba(244,123,48,.18)}100%{background:transparent}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+<script id="semah-motion-js">
+(() => {
+  const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // 1) indicador de pestaña + transición de vista
+  const tabs = document.querySelector('.tabs');
+  if (tabs) {
+    const ind = document.createElement('span'); ind.className = 'tab-ind'; tabs.appendChild(ind);
+    const mover = () => { const a = tabs.querySelector('.tab.active'); if (!a) return; ind.style.left = a.offsetLeft + 'px'; ind.style.width = a.offsetWidth + 'px'; ind.style.top = (a.offsetTop + a.offsetHeight - 3) + 'px'; };
+    tabs.addEventListener('click', (e) => {
+      if (!e.target.closest('.tab')) return;
+      setTimeout(() => {
+        mover();
+        const v = [...document.querySelectorAll('.panel > div[id^="view-"]')].find((x) => x.style.display !== 'none');
+        if (v && !quieto) { v.classList.remove('sm-view'); void v.offsetWidth; v.classList.add('sm-view'); }
+      }, 0);
+    });
+    addEventListener('resize', mover); setTimeout(mover, 300); new ResizeObserver(mover).observe(tabs);
+  }
+  // 2) números que cuentan cuando cambian
+  const contar = (n) => {
+    if (quieto) return;
+    const m = (n.firstChild && n.firstChild.nodeType === 3 ? n.firstChild.nodeValue : '').match(/^\s*([\d.,]+)\s*$/);
+    if (!m) return; const txt = m[1], fin = parseFloat(txt.replace(/[.,](?=\d{3}\b)/g, '').replace(',', '.'));
+    if (!isFinite(fin) || fin === 0) return;
+    const prev = parseFloat(n.dataset.smv ?? 'NaN'); n.dataset.smv = fin; if (prev === fin) return;
+    const desde = isFinite(prev) ? prev : 0, t0 = performance.now(), dur = 700, dec = (txt.split(/[.,]/)[1] || '').length && !/[.,]\d{3}\b/.test(txt) ? 1 : 0, fmt = new Intl.NumberFormat('es-PA', { maximumFractionDigits: dec, minimumFractionDigits: dec });
+    const nodo = n.firstChild;
+    const paso = (t) => { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3); nodo.nodeValue = fmt.format(desde + (fin - desde) * e); if (p < 1) requestAnimationFrame(paso); else nodo.nodeValue = txt; };
+    requestAnimationFrame(paso);
+  };
+  const animarStats = (box) => {
+    [...box.children].forEach((c, i) => { if (quieto) return; c.classList.remove('sm-in'); void c.offsetWidth; c.style.animationDelay = (i * 60) + 'ms'; c.classList.add('sm-in'); });
+    box.querySelectorAll('.num, .kpi .n, .res-line b').forEach(contar);
+  };
+  // 3) filas que entran escalonadas
+  const animarFilas = (tb) => {
+    if (quieto) return;
+    [...tb.rows].slice(0, 24).forEach((r, i) => { r.classList.remove('sm-row'); r.style.animationDelay = (i * 22) + 'ms'; r.classList.add('sm-row'); });
+  };
+  const visto = new WeakSet();
+  const obs = new MutationObserver((muts) => {
+    const st = new Set(), tb = new Set();
+    for (const m of muts) {
+      const t = m.target; if (!(t instanceof Element)) continue;
+      const s = t.closest('.stats'); if (s) st.add(s);
+      const b = t.tagName === 'TBODY' ? t : t.closest('tbody'); if (b && m.type === 'childList' && m.addedNodes.length) tb.add(b);
+    }
+    st.forEach((s) => { if (s.offsetParent !== null || !visto.has(s)) { visto.add(s); animarStats(s); } });
+    tb.forEach(animarFilas);
+  });
+  const empezar = () => obs.observe(document.getElementById('mainWrap') || document.body, { childList: true, subtree: true });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', empezar); else empezar();
+})();
+</script>
+
 </body>
 </html>
