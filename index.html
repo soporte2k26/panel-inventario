@@ -3354,6 +3354,12 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
 .pf-col.grp .pf-it{flex-wrap:nowrap}
 .pf-col.grp select.rsp{flex:0 1 230px!important;margin:0!important}
 .pf-it .pl.mj{color:#B98625;font-weight:600;white-space:normal}
+.pf-ed{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:5px}
+.pf-ed.one{grid-template-columns:1fr}
+.pf-ed.one label{color:#3F6FA3}
+.pf-ed label{display:flex;flex-direction:column;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);gap:2px}
+.pf-ed input{font-size:12px!important;padding:4px 7px!important;text-transform:none;letter-spacing:0;font-weight:400;width:100%;box-sizing:border-box}
+
 .pf-it .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .pf-it .nm:hover{text-decoration:underline}
 .pf-it .pl{font-size:11px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -3386,10 +3392,12 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
   const nombre = (u) => { const f = g('nomUsuario'); if (typeof f === 'function') { try { return f(u); } catch (e) {} } return ((u.nombre || '') + ' ' + (u.apellido || '')).trim(); };
   const ini = (t) => sinAc(t).split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '·';
 
+  // Google: la cuenta cuenta en la licencia del Workspace donde vive (campo googleWorkspace), igual que en Revisión
+  const GW = { 'SG. Investment': ['Semah', 'SG. Investment'] };
   function perfilesDe(l) {
     const txt = ((l.nombre || '') + ' ' + (l.proveedor || '')).toLowerCase();
-    const us = (g('usuarios') || []).filter((u) => u.empresa === l.empresa);
-    if (/google|gmail|workspace/.test(txt)) { const f = g('tieneGmail'); return typeof f === 'function' ? { us: us.filter(f), tipo: 'gmail' } : null; }
+    const todos = g('usuarios') || [], us = todos.filter((u) => u.empresa === l.empresa);
+    if (/google|gmail|workspace/.test(txt)) { const gws = GW[l.empresa] || [l.empresa]; return { us: todos.filter((u) => gws.includes(u.googleWorkspace) && !/sin licencia/i.test(u.gmailPlan || '')), tipo: 'gmail' }; }
     if (/dropbox/.test(txt)) { const f = g('tieneDropbox'); return typeof f === 'function' ? { us: us.filter(f), tipo: 'dropbox' } : null; }
     return null;
   }
@@ -3404,21 +3412,26 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
     const ver = (arr) => arr.filter((u) => !q || sinAc(nombre(u) + ' ' + (u.correo || '') + ' ' + (u.gmailPlan || '')).includes(q)).sort((a, b) => nombre(a).localeCompare(nombre(b), 'es'));
     const todos = (g('usuarios') || []).filter((x) => x.empresa === l.empresa);
     const personas = todos.filter((x) => tipoDe(x) === 'Personal').sort((a, b) => nombre(a).localeCompare(nombre(b), 'es'));
-    const maneja = (u) => todos.filter((x) => tipoDe(x) === 'Grupo' && x.responsableId === u.id).map(nombre);
+    const maneja = (u) => (g('usuarios') || []).filter((x) => tipoDe(x) === 'Grupo' && x.responsableId === u.id).map((x) => x.aliasPerfil || nombre(x));
+    const aCargo = (u) => { const r = u.responsableId && (g('usuarios') || []).find((x) => x.id === u.responsableId); return r ? nombre(r) : (u.responsableNombre || ''); };
     const item = (u, i, col) => {
       const nm = nombre(u), dup = cnt[sinAc(nm)] > 1, grp = tipoDe(u) === 'Grupo';
-      const extra = grp ? `<select class="rsp" data-u="${esc(u.id)}" title="Quién maneja este perfil"><option value="">¿Quién lo maneja? · sin asignar</option>${personas.map((x) => `<option value="${esc(x.id)}" ${u.responsableId === x.id ? 'selected' : ''}>Lo maneja ${esc(nombre(x))}</option>`).join('')}</select>`
-        : (maneja(u).length ? `<div class="pl mj">También maneja: ${esc(maneja(u).join(', '))}</div>` : '');
+      const otra = u.empresa !== l.empresa || u.usoEmpresa;
+      const uso = otra ? `<div class="pf-ed one"><label>La usa (licencia de ${esc(l.empresa)})<input type="text" class="us" data-u="${esc(u.id)}" value="${esc(u.usoEmpresa || u.empresa || '')}" placeholder="Empresa o sede que la usa"></label></div>` : '';
+      const extra = uso + (grp ? `<div class="pf-ed"><label>Alias<input type="text" class="al" data-u="${esc(u.id)}" value="${esc(u.aliasPerfil || '')}" placeholder="Ej. Recepción principal"></label>
+          <label>Persona a cargo<input type="text" class="rc" data-u="${esc(u.id)}" list="pf-personas-${esc(l.id)}" value="${esc(aCargo(u))}" placeholder="Nombre o apodo de quien lo maneja"></label></div>`
+        : (maneja(u).length ? `<div class="pl mj">También maneja: ${esc(maneja(u).join(', '))}</div>` : ''));
       return `<div class="pf-it" style="animation-delay:${Math.min(i, 30) * 12}ms"><span class="av" style="--c:${col}">${esc(ini(nm))}</span>
-        <div class="tx"><div class="nm" data-u="${esc(u.id)}" title="Abrir ${esc(nm)}">${esc(nm)}</div><div class="pl">${esc(u.correo || planTxt(u, P.tipo))}${dup ? ' · <span class="dup">repetido</span>' : ''}${manual(u) ? '' : ' · auto'}</div>${extra}</div>
+        <div class="tx"><div class="nm" data-u="${esc(u.id)}" title="Abrir ${esc(nm)}">${esc(grp && u.aliasPerfil ? u.aliasPerfil : nm)}${grp && u.aliasPerfil ? ` <span class="pf-chipcnt">(${esc(nm)})</span>` : ''}</div><div class="pl">${esc(u.correo || planTxt(u, P.tipo))}${dup ? ' · <span class="dup">repetido</span>' : ''}${manual(u) ? '' : ' · auto'}</div>${extra}</div>
         <button type="button" class="sw" data-u="${esc(u.id)}" data-t="${tipoDe(u) === 'Grupo' ? 'Personal' : 'Grupo'}" title="Marcar como ${tipoDe(u) === 'Grupo' ? 'usuario personal' : 'perfil de grupo'}">${tipoDe(u) === 'Grupo' ? '→ Personal' : '→ Grupo'}</button></div>`;
     };
     const lp = ver(per), lg = ver(gru), tot = P.us.length || 1;
     const dups = Object.values(cnt).filter((n) => n > 1).length;
     const dif = contr ? P.us.length - contr : null;
     return `<div class="pf-wrap">
-      <div class="pf-top"><div class="pf-leg"><span style="--c:#3F6FA3"><b>${per.length}</b>usuarios personales</span><span style="--c:#F47B30"><b>${gru.length}</b>perfiles de grupo (${gru.filter((u) => u.responsableId).length} con responsable)</span><span style="--c:#cfc6ad"><b>${P.us.length}</b>en uso de ${contr || '—'} contratadas</span></div>
+      <div class="pf-top"><div class="pf-leg"><span style="--c:#3F6FA3"><b>${per.length}</b>usuarios personales</span><span style="--c:#F47B30"><b>${gru.length}</b>perfiles de grupo (${gru.filter((u) => u.responsableId || u.responsableNombre).length} con persona a cargo)</span><span style="--c:#cfc6ad"><b>${P.us.length}</b>en uso de ${contr || '—'} contratadas</span></div>
         <div class="pf-split" aria-hidden="true"><i style="background:#3F6FA3" data-w="${per.length / tot * 100}"></i><i style="background:#F47B30" data-w="${gru.length / tot * 100}"></i></div></div>
+      <datalist id="pf-personas-${esc(l.id)}">${personas.map((x) => `<option value="${esc(nombre(x))}">`).join('')}</datalist>
       <div class="pf-tools"><input type="text" class="pf-q" placeholder="Buscar perfil, correo o plan…" value="${esc(S.q[l.id] || '')}">
         ${[['', 'Todos'], ['Personal', 'Solo personales'], ['Grupo', 'Solo grupo']].map(([k, t]) => `<button type="button" class="secondary pf-f" data-f="${k}" aria-pressed="${fil === k}">${t}</button>`).join('')}</div>
       <div class="pf-cols" style="${fil ? 'grid-template-columns:1fr' : ''}">
@@ -3426,7 +3439,7 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
         ${fil !== 'Personal' ? `<div class="pf-col grp"><h5><span>Perfiles de grupo o de área</span><span class="pf-chipcnt">${lg.length}</span></h5><div class="pf-list">${lg.map((u, i) => item(u, i, '#F47B30')).join('') || '<span class="pf-chipcnt">Sin resultados</span>'}</div></div>` : ''}
       </div>
       ${dif > 0 || dups ? `<div class="pf-aviso">${dif > 0 ? `Hay <b>${dif}</b> perfil${dif === 1 ? '' : 'es'} más en uso que licencias contratadas. ` : ''}${dups ? `<b>${dups}</b> nombre${dups === 1 ? ' aparece' : 's aparecen'} repetido${dups === 1 ? '' : 's'}: revisa si son la misma cuenta.` : ''}</div>` : ''}
-      <div style="margin-top:8px;font-size:11px;color:var(--ink-soft)">Personal = cuenta con nombre y apellido de una persona. Grupo = perfil con nombre de área o apodo (Recepción, Cobros, Legal…); elige quién lo maneja. “auto” = clasificado por el nombre; corrígelo con → Grupo / → Personal.</div>
+      <div style="margin-top:8px;font-size:11px;color:var(--ink-soft)">Personal = cuenta con nombre y apellido de una persona. Grupo = perfil con nombre de área o apodo (Recepción, Cobros, Legal…); ponle un alias y anota la persona a cargo (puede ser alguien de la lista o un apodo). “auto” = clasificado por el nombre; corrígelo con → Grupo / → Personal.</div>
     </div>`;
   }
 
@@ -3439,12 +3452,15 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
     td.querySelectorAll('.pf-f').forEach((b) => b.onclick = () => { S.f[l.id] = b.dataset.f; pintarFila(l, tr, true); });
     td.querySelectorAll('.nm').forEach((n) => n.onclick = () => { const f = g('editUser'); if (typeof f === 'function') f(n.dataset.u); });
     td.querySelectorAll('.sw').forEach((b) => b.onclick = () => guardar(b.dataset.u, { tipoCuenta: b.dataset.t }, b, b.dataset.t === 'Grupo' ? 'Marcado como perfil de grupo ✓' : 'Marcado como usuario personal ✓'));
-    td.querySelectorAll('.rsp').forEach((sl) => sl.onchange = () => guardar(sl.dataset.u, { responsableId: sl.value || null }, sl, sl.value ? 'Responsable asignado ✓' : 'Responsable quitado ✓'));
+    const personasL = (g('usuarios') || []).filter((x) => x.empresa === l.empresa && tipoDe(x) === 'Personal');
+    td.querySelectorAll('.al').forEach((i) => i.onchange = () => guardar(i.dataset.u, { aliasPerfil: i.value.trim() || null }, i, i.value.trim() ? 'Alias guardado ✓' : 'Alias quitado ✓'));
+    td.querySelectorAll('.rc').forEach((i) => i.onchange = () => { const v = i.value.trim(); const m = personasL.find((x) => sinAc(nombre(x)) === sinAc(v)); guardar(i.dataset.u, m ? { responsableId: m.id, responsableNombre: null } : { responsableId: null, responsableNombre: v || null }, i, v ? 'Persona a cargo guardada ✓' : 'Persona a cargo quitada ✓'); });
+    td.querySelectorAll('.us').forEach((i) => i.onchange = () => guardar(i.dataset.u, { usoEmpresa: i.value.trim() || null }, i, 'Empresa que la usa guardada ✓'));
   }
 
   async function guardar(id, cambio, btn, msg) {
     if (g('readOnly')) { alert('Sin conexión con la base de datos: no se puede guardar.'); return; }
-    btn.disabled = true; if (btn.tagName === 'BUTTON') btn.textContent = 'Guardando…';
+    btn.disabled = true; if (btn.tagName === 'BUTTON' && btn.classList.contains('sw')) btn.textContent = 'Guardando…';
     const St = g('Storage');
     try {
       const nuevos = (g('usuarios') || []).map((u) => u.id === id ? { ...u, ...cambio } : u);
@@ -3475,7 +3491,11 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
     const n = function () { const r = f.apply(this, arguments); try { decorar(); } catch (e) { console.warn('Perfiles:', e); } return r; };
     n.__pf = true; window.renderLicTable = n;
   };
-  const arrancar = () => { enganchar(); try { decorar(); } catch (e) {} };
+  const engancharUso = () => {
+    if (typeof window.enUsoLic !== 'function' || window.enUsoLic.__pf) return;
+    const n = function (l) { const P = perfilesDe(l); return P ? P.us.length : null; }; n.__pf = true; window.enUsoLic = n;
+  };
+  const arrancar = () => { engancharUso(); enganchar(); try { decorar(); } catch (e) {} };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
 })();
 </script>
