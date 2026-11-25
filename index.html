@@ -3181,9 +3181,8 @@ async function init(){
         <div class="mes"><button type="button" id="r-prev" aria-label="Mes anterior">‹</button><b id="r-mesl"></b><button type="button" id="r-next" aria-label="Mes siguiente">›</button></div></div>
         <svg class="flow" id="r-flow" viewBox="0 0 620 260" role="img" aria-label="Entradas y salidas del mes"></svg><div class="chips" id="r-chips"></div></div>
         <div class="card"><h4>Salud del parque · Semah Monitor</h4><div id="r-rings"></div><div id="r-bars" style="margin-top:12px"></div></div></div>
-      <div class="sec"><h4>Por empresa · clic para filtrar</h4><div class="emps" id="r-emps"></div></div>
       <div class="sec"><h4>Pendientes</h4><div class="pend" id="r-pend"></div></div>
-      <div class="sec"><h4>Licencias por empresa</h4></div>`;
+      <div class="sec"><h4>Licencias por empresa · clic en una tarjeta para filtrar</h4></div>`;
     v.insertBefore(box, v.firstChild);
     box.querySelector('#r-prev').onclick = () => { S.mes = addM(S.mes, -1); S.anim = true; pintar(); };
     box.querySelector('#r-next').onclick = () => { S.mes = addM(S.mes, 1); S.anim = true; pintar(); };
@@ -3256,6 +3255,7 @@ async function init(){
   }
 
   function empresas() {
+    if (!document.getElementById('r-emps')) return;   // las tarjetas por empresa quedan solo en Licencias (abajo)
     const EMP = arr('EMPRESAS'), eq = arr('equipo'), us = arr('usuarios'), mv = arr('movs').filter((m) => ym(m.fecha) === S.mes);
     const tieneG = g('tieneGmail');
     const box = document.getElementById('r-emps'); box.replaceChildren();
