@@ -3726,5 +3726,227 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
 })();
 </script>
 
+<!-- ===== Semah IT · Usuarios por persona y solicitudes de Gmail (se puede quitar borrando este bloque) ===== -->
+<style id="semah-personas">
+#userStats.us-dir .us-fila{display:flex;flex-wrap:wrap;gap:8px;flex:1 1 100%}
+#userStats.us-dir .us-tot{flex:1 1 100%;font-size:13px;margin:2px 0}
+#userStats.us-dir .us-tot b{font-size:15px}
+#userStats.us-dir .us-est button{border-radius:6px}
+#userStats.us-dir .us-est button.warn{border-color:#d9a441}
+#userStats.us-dir .us-est button.alert{border-color:#B0512C}
+#userTbody .pe-otra{display:block;font-size:11px;color:var(--ink-soft);font-weight:400;margin-top:2px}
+#userTbody .pe-dbx{display:block;font-size:10.5px;color:var(--ink-soft);margin-top:2px}
+#userTbody .tag.pe-nr{background:transparent;color:var(--ink-soft);border:1px dashed var(--rule)}
+#userTbody .tag.pe-sol{background:#fbf0d9;color:#8a5a00}
+#userTbody .tag.pe-sinlic{background:#fbf0d9;color:#8a5a00}
+#userTbody .pe-btn{margin-left:6px;padding:1px 8px;font-size:11px;box-shadow:none}
+</style>
+<script id="semah-personas-js">
+(() => {
+  const g = (n) => { try { return eval(n); } catch (e) { return undefined; } };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const sinAc = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const nom = (u) => ((u.nombre || '') + ' ' + (u.apellido || '')).replace(/\s+/g, ' ').trim();
+  const fecha = (iso) => { try { return new Date(iso + (iso.length === 10 ? 'T12:00:00' : '')).toLocaleDateString('es-PA', { day: '2-digit', month: 'short' }); } catch (e) { return iso || ''; } };
+  const hoy = () => new Date().toISOString().slice(0, 10);
+  const gm = (u) => { const f = g('tieneGmail'); return typeof f === 'function' ? f(u) : false; };
+  const db = (u) => { const f = g('tieneDropbox'); return typeof f === 'function' ? f(u) : false; };
+  const plan = (p) => { const f = g('planCorto'); return typeof f === 'function' ? f(p) : p; };
+
+  // Una persona puede tener varias cuentas (p. ej. Gmail en Semah y en Haus). Los perfiles de grupo cuentan aparte.
+  const AREA = /\b(recepci|sucursal|cobros|scaner|scanner|ventas|postventa|administraci|gestion|soporte|proveedor|storage|bodega|caja|contabilidad|compras|oficina|tesoreria|it)\b/;
+  const esGrupo = (u) => u.tipoCuenta === 'Grupo' || (u.tipoCuenta !== 'Personal' && AREA.test(sinAc(nom(u))));
+  const personaDe = (u) => esGrupo(u) ? 'cuenta:' + u.id : 'p:' + sinAc(nom(u));
+
+  // Estado de cada registro
+  function estado(u) {
+    if (u.estadoGoogle === 'Suspendida') return 'susp';
+    if (gm(u)) return 'gmail';
+    if (u.googleWorkspace && String(u.googleWorkspace).trim()) return 'sinlic';   // tiene cuenta en Google pero sin licencia
+    if (u.gmailSolicitud) return 'solicitado';
+    if (db(u)) return 'dropbox';
+    return 'nada';
+  }
+  const EST = {
+    gmail: { t: 'Con Gmail', h: 'Tienen licencia de Gmail (con o sin Dropbox)' },
+    dropbox: { t: 'Solo Dropbox', h: 'Usuarios de la empresa con Dropbox. No requieren Gmail hasta que se apruebe una solicitud' },
+    solicitado: { t: 'Gmail solicitado', h: 'Pidieron Gmail y falta asignar la licencia', c: 'warn' },
+    nada: { t: 'Sin cuenta', h: 'Personas con equipo o línea, sin Gmail ni Dropbox' },
+    revisar: { t: 'Por revisar', h: 'Suspendidas en Google o con cuenta de Google sin licencia', c: 'alert' },
+  };
+  const enFiltro = (u, f) => {
+    const e = estado(u), g1 = gm(u), d = db(u);
+    switch (f) {
+      case '': return true;
+      case 'gmail': return g1; case 'dropbox': return d; case 'ambas': return g1 && d; case 'solo-gw': return g1 && !d;
+      case 'solo-db': return e === 'dropbox'; case 'ninguna': return e === 'nada';
+      case 'solicitado': return e === 'solicitado'; case 'revisar': return e === 'susp' || e === 'sinlic';
+    }
+    return true;
+  };
+
+  function ajustarFiltro() {
+    const s = document.getElementById('userLicFilter'); if (!s || s.dataset.pe) return; s.dataset.pe = '1';
+    const o = (v) => s.querySelector(`option[value="${v}"]`);
+    if (o('solo-db')) o('solo-db').textContent = 'Solo Dropbox (no requiere Gmail)';
+    if (o('ninguna')) o('ninguna').textContent = 'Sin cuenta (solo equipo o línea)';
+    [['solicitado', 'Gmail solicitado'], ['revisar', 'Por revisar (suspendidas / sin licencia)']].forEach(([v, t]) => { if (!o(v)) { const x = document.createElement('option'); x.value = v; x.textContent = t; s.appendChild(x); } });
+    s.onchange = () => { window.renderUserTable(); window.renderUserStats(); };
+    const q = document.getElementById('userSearch'); if (q) q.oninput = () => window.renderUserTable();
+  }
+
+  function stats() {
+    const box = document.getElementById('userStats'); if (!box) return;
+    const all = g('usuarios') || [], EMP = g('EMPRESAS') || [];
+    const sel = (document.getElementById('userEmpresaFilter') || {}).value || '', lf = (document.getElementById('userLicFilter') || {}).value || '';
+    const us = sel ? all.filter((u) => u.empresa === sel) : all;
+    const personas = new Set(us.map(personaDe)).size;
+    const n = (f) => us.filter((u) => enFiltro(u, f)).length;
+    box.className = 'us-dir';
+    box.innerHTML = `<div class="us-nota">Directorio de personas y sus cuentas. Arriba están las licencias por empresa tal como están en cada consola; <a id="us-ir-lic">ir a licencias</a>.</div>
+      <div class="us-tot"><b>${personas}</b> personas y perfiles de grupo · ${us.length} cuentas${us.length > personas ? ` <span style="color:var(--ink-soft)">(${us.length - personas} personas tienen más de una cuenta)</span>` : ''}</div>
+      <div class="us-fila">${['', ...EMP].map((e) => `<button type="button" data-e="${esc(e)}" aria-pressed="${sel === e}">${e ? esc(e) : 'Todas'}<span>${e ? all.filter((u) => u.empresa === e).length : all.length}</span></button>`).join('')}</div>
+      <div class="us-fila us-est">${Object.entries({ gmail: 'gmail', dropbox: 'solo-db', solicitado: 'solicitado', nada: 'ninguna', revisar: 'revisar' }).map(([k, f]) => { const c = n(f); if (!c && k !== 'gmail' && k !== 'dropbox') return ''; return `<button type="button" class="${EST[k].c || ''}" data-f="${f}" aria-pressed="${lf === f}" title="${esc(EST[k].h)}">${EST[k].t}<span>${c}</span></button>`; }).join('')}</div>`;
+    box.querySelectorAll('button[data-e]').forEach((b) => b.onclick = () => { const s = document.getElementById('userEmpresaFilter'); s.value = b.dataset.e; s.dispatchEvent(new Event('change')); });
+    box.querySelectorAll('button[data-f]').forEach((b) => b.onclick = () => { const s = document.getElementById('userLicFilter'); s.value = s.value === b.dataset.f ? '' : b.dataset.f; window.renderUserTable(); stats(); });
+    box.querySelector('#us-ir-lic').onclick = () => { const x = document.getElementById('licSeccion'); if (x) x.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  }
+
+  function celdaGmail(u) {
+    const e = estado(u), s = u.gmailSolicitud;
+    if (e === 'susp') return '<span class="tag us-susp" title="Cuenta suspendida en la consola de Google">Suspendida</span>';
+    if (e === 'gmail') return `<span class="tag">${esc(plan(u.gmailPlan) || 'Sí')}</span>`;
+    if (e === 'sinlic') return '<span class="tag pe-sinlic" title="Existe en la consola de Google pero sin licencia asignada">Cuenta sin licencia</span>';
+    if (e === 'solicitado') return `<span class="tag pe-sol" title="${esc([s.plan, s.motivo, s.por && 'pidió ' + s.por].filter(Boolean).join(' · '))}">Solicitado ${esc(fecha(s.fecha))}</span><button class="pe-btn" data-otorgar="${esc(u.id)}" title="Asignar la licencia de Gmail">Otorgar</button><button class="pe-btn secondary" data-cancelar="${esc(u.id)}" title="Cancelar la solicitud">×</button>`;
+    const nr = e === 'dropbox' ? '<span class="tag pe-nr" title="Usuario de la empresa con Dropbox. No requiere Gmail hasta que se apruebe una solicitud.">No requerido</span>' : '—';
+    return nr + `<button class="pe-btn secondary" data-solicitar="${esc(u.id)}" title="Registrar una solicitud de Gmail para esta persona">Solicitar</button>`;
+  }
+
+  function tabla() {
+    const tbody = document.getElementById('userTbody'); if (!tbody) return;
+    const all = g('usuarios') || [], EMP = g('EMPRESAS') || [];
+    const empresaF = document.getElementById('userEmpresaFilter').value, licF = document.getElementById('userLicFilter').value;
+    const q = sinAc(document.getElementById('userSearch').value);
+    const otras = new Map(); all.forEach((u) => { const k = personaDe(u); if (!otras.has(k)) otras.set(k, []); otras.get(k).push(u); });
+    const rows = all.filter((u) => (!empresaF || u.empresa === empresaF) && enFiltro(u, licF) &&
+      (!q || sinAc(nom(u)).includes(q) || sinAc(u.correo).includes(q) || sinAc(u.dropboxCuenta).includes(q)));
+    if (!rows.length && (q || licF)) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Sin resultados.</td></tr>'; return; }
+    const grupos = [...EMP, ...[...new Set(rows.map((u) => u.empresa))].filter((e) => !EMP.includes(e))];
+    tbody.innerHTML = grupos.map((emp) => {
+      const us = rows.filter((u) => u.empresa === emp).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+      if (!us.length) return (q || licF || (empresaF && empresaF !== emp)) ? '' : `<tr class="grupo"><td colspan="6">${esc((emp || 'Sin empresa').toUpperCase())} &nbsp;·&nbsp; 0 usuarios</td></tr><tr><td colspan="6" class="empty" style="padding:14px;">Sin usuarios registrados para ${esc(emp)}. Usa “+ Nuevo usuario”.</td></tr>`;
+      const c = (f) => us.filter((u) => enFiltro(u, f)).length;
+      const det = [`Gmail ${c('gmail')}`, `Dropbox ${c('dropbox')}`, c('solo-db') && `solo Dropbox ${c('solo-db')}`, c('ninguna') && `sin cuenta ${c('ninguna')}`, c('revisar') && `por revisar ${c('revisar')}`].filter(Boolean).join(' &nbsp;·&nbsp; ');
+      return `<tr class="grupo"><td colspan="6">${esc((emp || 'Sin empresa').toUpperCase())} &nbsp;·&nbsp; ${det} &nbsp;·&nbsp; ${new Set(us.map(personaDe)).size} personas</td></tr>` +
+        us.map((u) => {
+          const mas = (otras.get(personaDe(u)) || []).filter((x) => x.id !== u.id && x.correo);
+          return `<tr>
+          <td><b>${esc(u.nombre)}</b>${u.pendienteReasignar ? ` <span class="tag rust" title="${esc(u.titularSalio || '')} salió${u.salidaActa ? ' (acta ' + esc(u.salidaActa) + ')' : ''}. La cuenta conserva sus licencias y espera a la persona nueva.">Por reasignar</span>` : ''}${mas.length ? `<span class="pe-otra" title="La misma persona tiene otra(s) cuenta(s)">también ${mas.map((x) => esc(x.correo)).join(', ')}</span>` : ''}</td>
+          <td>${esc(u.apellido)}</td>
+          <td class="mono" style="font-size:11px;">${esc(u.correo)}</td>
+          <td>${celdaGmail(u)}</td>
+          <td>${db(u) ? '<span class="tag rust">Sí</span>' : '—'}${db(u) && u.dropboxCuenta && sinAc(u.dropboxCuenta) !== sinAc(u.correo) ? `<span class="pe-dbx mono">${esc(u.dropboxCuenta)}</span>` : ''}</td>
+          <td class="row-actions">
+            <button class="secondary" onclick="editUser('${u.id}')">Editar</button>
+            <button class="danger" onclick="delUser('${u.id}')">Eliminar</button>
+          </td></tr>`;
+        }).join('');
+    }).join('');
+    tbody.querySelectorAll('[data-solicitar]').forEach((b) => b.onclick = (ev) => { ev.stopPropagation(); solicitar(b.dataset.solicitar); });
+    tbody.querySelectorAll('[data-otorgar]').forEach((b) => b.onclick = (ev) => { ev.stopPropagation(); otorgar(b.dataset.otorgar); });
+    tbody.querySelectorAll('[data-cancelar]').forEach((b) => b.onclick = (ev) => { ev.stopPropagation(); cancelar(b.dataset.cancelar); });
+  }
+
+  async function guardarUsuario(id, cambio, msg) {
+    const nuevos = (g('usuarios') || []).map((u) => u.id === id ? cambio(u) : u);
+    eval('usuarios = nuevos');
+    const ok = await g('Storage').set('usuarios', nuevos);
+    try { g('refreshUserUI')(); } catch (e) { tabla(); stats(); }
+    if (ok && msg) { const t = g('toast'); if (typeof t === 'function') t(msg); }
+    return ok;
+  }
+
+  function solicitar(id) {
+    const u = (g('usuarios') || []).find((x) => x.id === id); if (!u) return;
+    document.getElementById('modalBox').innerHTML = `
+      <h3>Solicitud de Gmail</h3>
+      <div class="eq-resumen" style="margin:0 0 10px;"><b>${esc(nom(u))}</b> · ${esc(u.empresa || '')}${db(u) ? ' · tiene Dropbox' : ''}. Queda registrada como <b>Gmail solicitado</b>. Cuando le asignes la licencia con “Otorgar”, NexoIT la cuenta como licencia nueva del grupo si no hay asiento libre.</div>
+      <div class="field"><label>Plan pedido</label><select id="pe_plan"><option>Business Starter 30GB</option><option>Business Standard 2TB</option><option>Business Plus 5TB</option></select></div>
+      <div class="field"><label>Correo propuesto</label><input id="pe_correo" type="text" value="${esc(u.correo || '')}" autocomplete="off"></div>
+      <div class="field"><label>Quién lo pide</label><input id="pe_por" type="text" placeholder="Jefe o área que lo solicita"></div>
+      <div class="field"><label>Motivo</label><input id="pe_motivo" type="text" placeholder="Ej. atiende clientes por correo"></div>
+      <div class="modal-actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button id="pe_ok">Registrar solicitud</button></div>`;
+    g('showModal')();
+    document.getElementById('pe_ok').onclick = async () => {
+      const v = (k) => document.getElementById(k).value.trim();
+      const s = { fecha: hoy(), plan: v('pe_plan'), correo: v('pe_correo').toLowerCase(), por: v('pe_por'), motivo: v('pe_motivo') };
+      g('closeModal')(true);
+      await guardarUsuario(id, (x) => ({ ...x, gmailSolicitud: s }), 'Solicitud de Gmail registrada ✓');
+      try { g('registrarAcceso')('Gmail solicitado', `${nom(u)} · ${s.plan}`); } catch (e) {}
+    };
+  }
+
+  function otorgar(id) {
+    const u = (g('usuarios') || []).find((x) => x.id === id); if (!u) return;
+    const s = u.gmailSolicitud || {};
+    window.editUser(id);
+    setTimeout(() => {
+      const set = (k, val) => { const el = document.getElementById(k); if (el && val) el.value = val; };
+      set('u_gw', 'Sí'); set('u_plan', s.plan); if (s.correo && !(document.getElementById('u_correo') || {}).value) set('u_correo', s.correo);
+      const box = document.getElementById('modalBox');
+      if (box && !box.querySelector('.pe-aviso')) { const d = document.createElement('div'); d.className = 'eq-resumen pe-aviso'; d.style.margin = '0 0 10px'; d.innerHTML = `Otorgando Gmail solicitado el ${esc(fecha(s.fecha))}${s.por ? ' por ' + esc(s.por) : ''}. Revisa el correo y el plan, y guarda.`; box.insertBefore(d, box.children[1]); }
+    }, 0);
+  }
+
+  async function cancelar(id) {
+    const u = (g('usuarios') || []).find((x) => x.id === id); if (!u) return;
+    if (!confirm(`¿Cancelar la solicitud de Gmail de ${nom(u)}?`)) return;
+    await guardarUsuario(id, (x) => { const { gmailSolicitud, ...r } = x; return { ...r, gmailSolicitudHist: [...(x.gmailSolicitudHist || []), { ...gmailSolicitud, cancelada: hoy() }] }; }, 'Solicitud cancelada');
+  }
+
+  // Formulario de usuario: correo de Dropbox cuando es distinto del de Gmail
+  function ampliarModal() {
+    const f = window.openUserModal || g('openUserModal'); if (typeof f !== 'function' || f.__pe) return;
+    const n = function (existing) {
+      const r = f.apply(this, arguments);
+      try {
+        const sel = document.getElementById('u_db'); if (sel && !document.getElementById('u_dbcuenta')) {
+          const d = document.createElement('div'); d.className = 'field';
+          d.innerHTML = `<label>Cuenta de Dropbox <span style="font-weight:400;color:var(--ink-soft)">(solo si es otro correo)</span></label><input id="u_dbcuenta" type="text" autocomplete="off" value="${esc((existing && existing.dropboxCuenta) || '')}" placeholder="Ej. postventa@hauspanama.com">`;
+          sel.closest('.field').after(d);
+        }
+      } catch (e) {}
+      return r;
+    };
+    n.__pe = true; window.openUserModal = n; try { eval('openUserModal = n'); } catch (e) {}
+  }
+  function ampliarGuardar() {
+    const f = window.saveUser; if (typeof f !== 'function' || f.__pe) return;
+    const n = async function (id) {
+      const el = document.getElementById('u_dbcuenta'), dbc = el ? el.value.trim().toLowerCase() : null;
+      const r = await f.apply(this, arguments);
+      try {
+        const u = (g('usuarios') || []).find((x) => x.id === id); if (!u) return r;
+        const cambios = {};
+        if (dbc !== null && dbc !== (u.dropboxCuenta || '')) cambios.dropboxCuenta = dbc;
+        if (u.gmailSolicitud && gm(u)) { cambios.gmailSolicitud = undefined; cambios.gmailSolicitudHist = [...(u.gmailSolicitudHist || []), { ...u.gmailSolicitud, otorgada: hoy() }]; }
+        if (Object.keys(cambios).length) await guardarUsuario(id, (x) => { const y = { ...x, ...cambios }; if ('gmailSolicitud' in cambios) delete y.gmailSolicitud; if (y.dropboxCuenta === '') delete y.dropboxCuenta; return y; }, cambios.gmailSolicitudHist ? 'Gmail otorgado ✓' : '');
+      } catch (e) { console.warn(e); }
+      return r;
+    };
+    n.__pe = true; window.saveUser = n;
+  }
+
+  const arrancar = () => {
+    ajustarFiltro(); ampliarModal(); ampliarGuardar();
+    window.renderUserStats = function () { stats(); }; window.renderUserStats.__us = true;
+    window.renderUserTable = function () { tabla(); }; window.renderUserTable.__us = true;
+    const e = document.getElementById('userEmpresaFilter'); if (e) e.onchange = () => { stats(); tabla(); };
+    try { stats(); tabla(); } catch (err) { console.warn(err); }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(arrancar, 0)); else setTimeout(arrancar, 0);
+})();
+</script>
+
 </body>
 </html>
