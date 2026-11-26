@@ -4054,5 +4054,92 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
 })();
 </script>
 
+
+<!-- ===== Semah IT · Animación de entrada "el nexo" (se puede quitar borrando este bloque) ===== -->
+<style id="semah-nexo-anim">
+#nxRed{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
+#masterGate{isolation:isolate}
+#masterGate #gateBox{position:relative;z-index:1}
+#nxRed .nx-l{stroke:rgba(250,248,242,.38);stroke-width:1.2;fill:none}
+#nxRed .nx-n{fill:#FAF8F2}
+#nxRed .nx-h{fill:none;stroke:#F47920;stroke-width:1.5}
+#nxRed .nx-t{fill:rgba(250,248,242,.78);font:500 11px 'IBM Plex Mono','SF Mono',monospace;letter-spacing:.08em;text-transform:uppercase}
+#nxRed .nx-p{fill:#FFB27A}
+#nxRed .nx-c{fill:none;stroke:rgba(244,121,32,.55);stroke-width:1.2}
+.nx-on #gateBox{animation:nxCard .55s cubic-bezier(.2,.8,.2,1) .95s both}
+@keyframes nxCard{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.nx-on #gateBox{animation:none}}
+</style>
+<script id="semah-nexo-anim-js">
+(() => {
+  // Las empresas del grupo se conectan al centro (NexoIT) y ahí aparece el acceso. Sin datos: solo nombres del grupo.
+  const EMP = ['Haus', 'Semah', 'SG. Investment', 'Colinas', 'Almacenajes', 'Docusafe'];
+  const NS = 'http://www.w3.org/2000/svg';
+  const quieto = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const el = (t, a, p) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+
+  function iniciar() {
+    const gate = document.getElementById('masterGate'), box = document.getElementById('gateBox');
+    if (!gate || !box || document.getElementById('nxRed') || gate.style.display === 'none') return;
+    const svg = el('svg', { id: 'nxRed', 'aria-hidden': 'true' }); gate.insertBefore(svg, gate.firstChild);
+    gate.classList.add('nx-on');
+    let nodos = [], t0 = performance.now(), raf = 0;
+
+    function armar() {
+      svg.replaceChildren();
+      const W = innerWidth, H = innerHeight; svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      const r = box.getBoundingClientRect(), cx = W / 2, cy = Math.min(H / 2, r.top + r.height / 2 || H / 2);
+      const angosto = W < 640;
+      const rx = angosto ? W / 2 - 64 : Math.min(W / 2 - 90, Math.max(r.width / 2 + 150, W * 0.34));
+      const ry = angosto ? Math.max(r.height / 2 + 60, Math.min(H / 2 - 40, r.height / 2 + 120)) : Math.min(H / 2 - 50, Math.max(r.height / 2 + 70, H * 0.36));
+      // en pantallas angostas, arriba y abajo de la tarjeta; en anchas, alrededor
+      const ang = angosto ? [-125, -90, -55, 55, 90, 125] : [-150, -90, -30, 30, 90, 150];
+      nodos = EMP.map((n, i) => {
+        const a = ang[i] * Math.PI / 180, x = cx + rx * Math.cos(a), y = cy + ry * Math.sin(a);
+        const largo = Math.hypot(x - cx, y - cy);
+        const g = el('g', {}, svg);
+        const l = el('line', { class: 'nx-l', x1: x, y1: y, x2: cx, y2: cy }, g);
+        if (!quieto) { l.style.strokeDasharray = largo; l.style.strokeDashoffset = largo; }
+        const h = el('circle', { class: 'nx-h', cx: x, cy: y, r: 7 }, g);
+        const c = el('circle', { class: 'nx-n', cx: x, cy: y, r: 3.5 }, g);
+        const lado = angosto ? 'middle' : Math.cos(a) < -0.2 ? 'end' : Math.cos(a) > 0.2 ? 'start' : 'middle';   // en el celular, nombre arriba o abajo del punto
+        const tx = x + (lado === 'end' ? -14 : lado === 'start' ? 14 : 0), ty = y + (lado === 'middle' ? (Math.sin(a) < 0 ? -16 : 24) : 4);
+        const t = el('text', { class: 'nx-t', x: tx, y: ty, 'text-anchor': lado }, g); t.textContent = n;
+        if (angosto && W < 420) t.style.fontSize = '9.5px';
+        const p = el('circle', { class: 'nx-p', r: 2.4, cx: x, cy: y, opacity: 0 }, g);
+        return { x, y, l, h, c, t, p, largo, d: i * 90 };
+      });
+      const ring = el('ellipse', { class: 'nx-c', cx, cy, rx: r.width / 2 + 10, ry: r.height / 2 + 10, opacity: 0 }, svg);
+      nodos.ring = ring; nodos.cx = cx; nodos.cy = cy;
+    }
+
+    const ease = (k) => 1 - Math.pow(1 - Math.min(1, Math.max(0, k)), 3);
+    function cuadro(now) {
+      if (gate.style.display === 'none' || !document.body.contains(gate)) { cancelAnimationFrame(raf); svg.remove(); return; }
+      const t = now - t0;
+      nodos.forEach((n) => {
+        const a = ease((t - n.d) / 260);                // aparece la empresa
+        n.c.setAttribute('opacity', a); n.t.setAttribute('opacity', a); n.h.setAttribute('opacity', a * .9);
+        n.h.setAttribute('r', 4 + 3 * a);
+        const k = ease((t - 250 - n.d * .6) / 520);     // la línea llega al centro
+        n.l.style.strokeDashoffset = n.largo * (1 - k);
+        // después, un pulso tenue viaja de cada empresa al centro, cada pocos segundos y por turnos
+        const ciclo = 5200, f = ((t - 1700 - n.d * 7) % ciclo) / 1400;
+        if (t > 1700 && f >= 0 && f <= 1) { n.p.setAttribute('cx', n.x + (nodos.cx - n.x) * f); n.p.setAttribute('cy', n.y + (nodos.cy - n.y) * f); n.p.setAttribute('opacity', Math.sin(f * Math.PI) * .9); }
+        else n.p.setAttribute('opacity', 0);
+      });
+      const kr = ease((t - 850) / 500); nodos.ring.setAttribute('opacity', kr * (1 - ease((t - 1500) / 900)) );
+      raf = requestAnimationFrame(cuadro);
+    }
+
+    armar();
+    if (quieto) { nodos.forEach((n) => { n.l.style.strokeDashoffset = 0; }); return; }
+    raf = requestAnimationFrame(cuadro);
+    let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { armar(); t0 = performance.now() - 2000; }, 120); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) cancelAnimationFrame(raf); else raf = requestAnimationFrame(cuadro); });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+})();
+</script>
 </body>
 </html>
