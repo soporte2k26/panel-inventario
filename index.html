@@ -4141,5 +4141,58 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
 })();
 </script>
+
+<!-- ===== Semah IT · Entrar con Google (se puede quitar borrando este bloque) ===== -->
+<style id="semah-google-login">
+#gateBox .gg-btn{width:100%;padding:12px;background:#FF7518;color:#22303A;border:none;border-radius:8px;font-weight:700;font-family:Inter,system-ui,sans-serif;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+#gateBox .gg-btn:disabled{opacity:.6;cursor:default}
+#gateBox .gg-btn:focus-visible{outline:2px solid #22303A;outline-offset:2px}
+#gateBox .gg-nota{font-size:11.5px;color:#5B6B72;margin:8px 0 0;font-family:Inter,system-ui,sans-serif;line-height:1.45}
+#gateBox .gg-alt{margin-top:16px;padding-top:12px;border-top:1px solid #E4DDCB}
+#gateBox .gg-alt button{all:unset;cursor:pointer;font-size:11.5px;color:#7A6A55;text-decoration:underline;font-family:'IBM Plex Mono','SF Mono',monospace}
+#gateBox .gg-alt button:focus-visible{outline:2px solid #22303A;outline-offset:2px}
+#gateBox.gg-modo .gg-clasico{display:none !important}
+</style>
+<script id="semah-google-login-js">
+(() => {
+  // Acceso principal con la cuenta de Google del grupo. Correo y contraseña quedan detrás de un enlace, como respaldo.
+  // Después de Google, NexoIT sigue pidiendo el código de la app autenticadora (función entrar → asegurarMFA).
+  const SOBRE = 'M2 4l6 5 6-5';
+  function armar() {
+    const box = document.getElementById('gateBox'), email = document.getElementById('masterPasscodeInput');
+    if (!box || !email || box.querySelector('.gg-btn')) return;
+    const p = box.querySelector('p'); if (p) p.dataset.ggOriginal = p.innerHTML;
+    // lo de siempre (correo, contraseña, entrar, recuperar) pasa a respaldo
+    ['masterPasscodeInput', 'masterPasswordInput', 'btnMasterUnlock', 'btnOlvideClave'].forEach((id) => { const e = document.getElementById(id); if (e) e.classList.add('gg-clasico'); });
+    const g = document.createElement('div'); g.className = 'gg-bloque';
+    g.innerHTML = `<button type="button" class="gg-btn" id="btnGoogle"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="3" width="13" height="10" rx="2" fill="none" stroke="#22303A" stroke-width="1.5"/><path d="${SOBRE}" fill="none" stroke="#22303A" stroke-width="1.5"/></svg>Continuar con Google</button>
+      <div class="gg-nota">Cuentas @semah.com y @hauspanama.com · luego el código de tu app autenticadora</div>`;
+    email.before(g);
+    const alt = document.createElement('div'); alt.className = 'gg-alt';
+    alt.innerHTML = '<button type="button" id="ggAlterna">¿Google no funciona? Entrar con correo y contraseña</button>';
+    box.appendChild(alt);
+    box.classList.add('gg-modo');
+    if (p) p.innerHTML = 'Acceso restringido — Haus / Semah Group<br>Entra con tu cuenta de Google del grupo';
+
+    document.getElementById('btnGoogle').onclick = async (ev) => {
+      const b = ev.currentTarget, err = document.getElementById('masterGateError');
+      if (!window.__sb) { if (err) { err.style.display = ''; err.textContent = 'No hay conexión con la base de datos.'; } return; }
+      b.disabled = true; b.lastChild.textContent = 'Abriendo Google…';
+      const { error } = await window.__sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname, queryParams: { prompt: 'select_account' } } });
+      if (error) {
+        b.disabled = false; b.lastChild.textContent = 'Continuar con Google';
+        if (err) { err.style.display = ''; err.style.color = '#B0512C'; err.textContent = /provider is not enabled|unsupported provider/i.test(error.message) ? 'El acceso con Google aún no está activado. Entra con correo y contraseña.' : 'No se pudo abrir Google: ' + error.message; }
+      }
+    };
+    document.getElementById('ggAlterna').onclick = () => {
+      box.classList.remove('gg-modo'); alt.remove();
+      if (p && p.dataset.ggOriginal) p.innerHTML = p.dataset.ggOriginal;
+      g.querySelector('.gg-nota').remove(); g.style.marginBottom = '14px';
+      email.focus();
+    };
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', armar); else armar();
+})();
+</script>
 </body>
 </html>
