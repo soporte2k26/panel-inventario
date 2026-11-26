@@ -4200,10 +4200,25 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
 #userTbody .fa-tag{display:inline-block;margin-left:6px;font-size:10.5px;padding:1px 7px;border-radius:999px;font-weight:600;white-space:nowrap}
 #userTbody .fa-si{background:#e3efe6;color:#2f6b45}
 #userTbody .fa-no{background:#f6e0d6;color:#9a3f1f}
-#userStats .fa-res{flex:1 1 100%;font-size:12.5px;color:var(--ink-soft);display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
-#userStats .fa-res b{color:var(--ink)}
-#userStats .fa-res .fa-bar{display:inline-block;width:120px;height:6px;border-radius:3px;background:#f6e0d6;overflow:hidden;vertical-align:middle}
-#userStats .fa-res .fa-bar i{display:block;height:100%;background:#4f8a63}
+#faPanel{margin:0 0 14px;border:1px solid var(--rule);border-radius:8px;background:#fff}
+#faPanel > summary{cursor:pointer;list-style:none;padding:10px 14px;display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center}
+#faPanel > summary::-webkit-details-marker{display:none}
+#faPanel > summary h4{margin:0;font-size:14px}
+#faPanel > summary h4::before{content:'▸ ';color:var(--ink-soft)}
+#faPanel[open] > summary h4::before{content:'▾ '}
+#faPanel .fa-bar{display:inline-block;width:140px;height:7px;border-radius:4px;background:#f6e0d6;overflow:hidden;vertical-align:middle}
+#faPanel .fa-bar i{display:block;height:100%;background:#4f8a63}
+#faPanel .fa-sum{font-size:12.5px;color:var(--ink-soft)}
+#faPanel .fa-sum b{color:var(--ink)}
+#faPanel .fa-cuerpo{padding:4px 14px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+#faPanel .fa-con h5{margin:0 0 6px;font-size:13px;display:flex;justify-content:space-between;gap:8px}
+#faPanel .fa-con h5 span{font-weight:400;color:var(--ink-soft);font-size:12px}
+#faPanel .fa-grp{margin:8px 0 0}
+#faPanel .fa-grp div{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:4px}
+#faPanel .fa-grp button{all:unset;cursor:pointer;display:inline-block;margin:0 4px 4px 0;padding:2px 9px;border-radius:999px;background:#f6e0d6;color:#7d3418;font-size:11.5px}
+#faPanel .fa-grp button:hover,#faPanel .fa-grp button:focus-visible{background:#ecc8b8;outline:none}
+#faPanel .fa-ok{font-size:12.5px;color:#2f6b45}
+#faPanel .fa-pie{grid-column:1/-1;font-size:11.5px;color:var(--ink-soft)}
 </style>
 <script id="semah-2fa-js">
 (() => {
@@ -4223,18 +4238,36 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
   const de = (u) => S.mapa && u && u.correo ? S.mapa.get(String(u.correo).toLowerCase()) : null;
   window.__estado2fa = de;   // para otros bloques (filtros, Monitor)
 
+  // Panel agrupado: por consola y, dentro, por empresa de NexoIT. Clic en una cuenta = la busca en la tabla.
   function resumen() {
-    const box = document.getElementById('userStats'); if (!box || !S.cargado || !Object.keys(S.consolas).length) return;
-    box.querySelector('.fa-res')?.remove();
+    const vu = document.getElementById('view-usuarios'), stats = document.getElementById('userStats');
+    if (!vu || !stats || !S.cargado || !Object.keys(S.consolas).length) return;
+    let p = document.getElementById('faPanel');
+    if (!p) { p = document.createElement('details'); p.id = 'faPanel'; try { p.open = localStorage.getItem('nx-fa-abierto') !== '0'; } catch (e) { p.open = true; } p.addEventListener('toggle', () => { try { localStorage.setItem('nx-fa-abierto', p.open ? '1' : '0'); } catch (e) {} }); }
+    if (p.previousElementSibling !== stats) stats.after(p);
+    const us = g('usuarios') || [];
+    const empDe = (c) => { const u = us.find((x) => String(x.correo || '').toLowerCase() === c.correo || (c.alias || []).includes(String(x.correo || '').toLowerCase())); return u ? (u.empresa || 'Sin empresa') : 'No está en NexoIT'; };
     const partes = Object.entries(S.consolas).map(([con, d]) => {
-      const act = (d.cuentas || []).filter((c) => !c.suspendida && !c.archivada), si = act.filter((c) => c.inscrito).length;
-      return { con, act: act.length, si, cuando: d.actualizado };
+      const act = (d.cuentas || []).filter((c) => !c.suspendida && !c.archivada), faltan = act.filter((c) => !c.inscrito);
+      const grupos = {}; faltan.forEach((c) => { const e = empDe(c); (grupos[e] = grupos[e] || []).push(c); });
+      return { con, act: act.length, si: act.length - faltan.length, faltan, grupos, cuando: d.actualizado };
     });
-    const T = partes.reduce((a, p) => ({ act: a.act + p.act, si: a.si + p.si }), { act: 0, si: 0 });
-    const d = document.createElement('div'); d.className = 'fa-res';
-    d.innerHTML = `<span>Doble factor en Google: <b>${T.si} de ${T.act}</b> cuentas activas <span class="fa-bar"><i style="width:${T.act ? Math.round(T.si / T.act * 100) : 0}%"></i></span></span>` +
-      partes.map((p) => `<span>${esc(p.con)}: ${p.si}/${p.act} · faltan <b>${p.act - p.si}</b> · leído ${esc(hace(p.cuando))}</span>`).join('');
-    const tot = box.querySelector('.us-tot'); if (tot) tot.after(d); else box.appendChild(d);
+    const T = partes.reduce((a, x) => ({ act: a.act + x.act, si: a.si + x.si }), { act: 0, si: 0 });
+    const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+    p.innerHTML = `<summary><h4>Doble factor en Google</h4>
+        <span class="fa-sum"><b>${T.si} de ${T.act}</b> cuentas activas <span class="fa-bar"><i style="width:${pct(T.si, T.act)}%"></i></span> · faltan <b>${T.act - T.si}</b></span>
+        ${partes.map((x) => `<span class="fa-sum">${esc(x.con)} ${x.si}/${x.act}</span>`).join('')}</summary>
+      <div class="fa-cuerpo">${partes.map((x) => `<div class="fa-con"><h5>${esc(x.con)} <span>${x.si} de ${x.act} · faltan ${x.faltan.length}</span></h5>
+          <span class="fa-bar" style="width:100%"><i style="width:${pct(x.si, x.act)}%"></i></span>
+          ${x.faltan.length ? Object.entries(x.grupos).sort((a, b) => b[1].length - a[1].length).map(([e, cs]) => `<div class="fa-grp"><div>${esc(e)} · ${cs.length}</div>${cs.map((c) => `<button type="button" data-c="${esc(c.correo)}" title="${esc(c.correo)}${c.ultimoAcceso ? ' · último acceso ' + esc(new Date(c.ultimoAcceso).toLocaleDateString('es-PA')) : ''}">${esc(c.nombre || c.correo.split('@')[0])}</button>`).join('')}</div>`).join('') : '<div class="fa-ok">Todas tienen doble factor ✓</div>'}
+        </div>`).join('')}
+        <div class="fa-pie">Leído de las consolas de Google ${partes.map((x) => esc(x.con) + ' ' + esc(hace(x.cuando))).join(' · ')} · se actualiza cada 6 horas · Monitor recibe una alerta por consola mientras falten cuentas.</div>
+      </div>`;
+    p.querySelectorAll('button[data-c]').forEach((b) => b.onclick = () => {
+      const q = document.getElementById('userSearch'), e = document.getElementById('userEmpresaFilter'), l = document.getElementById('userLicFilter');
+      if (e) e.value = ''; if (l) l.value = ''; if (q) { q.value = b.dataset.c; } window.renderUserTable(); try { window.renderUserStats(); } catch (er) {}
+      document.getElementById('userTbody')?.closest('.table-scroll')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
 
   function marcar() {
@@ -4280,7 +4313,7 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
   const arrancar = () => {
     filtro(); envolver(); setTimeout(() => cargar().catch(() => {}), 3500);
     const box = document.getElementById('userStats');   // otros bloques redibujan el encabezado: volver a poner el resumen
-    if (box) new MutationObserver(() => { if (S.cargado && !box.querySelector('.fa-res')) resumen(); }).observe(box, { childList: true });
+    if (box) new MutationObserver(() => { if (S.cargado && !document.getElementById('faPanel')) resumen(); }).observe(box, { childList: true });
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(arrancar, 80)); else setTimeout(arrancar, 80);
   document.addEventListener('click', (e) => { const t = e.target.closest('.tab'); if (t && t.dataset.view === 'usuarios') cargar().catch(() => {}); });
