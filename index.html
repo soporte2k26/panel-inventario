@@ -4194,5 +4194,97 @@ tr.pf-det>td{background:#fbf8f1!important;padding:0!important}
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', armar); else armar();
 })();
 </script>
+
+<!-- ===== Semah IT · Doble factor de cada cuenta, leído de las consolas de Google (se puede quitar borrando este bloque) ===== -->
+<style id="semah-2fa">
+#userTbody .fa-tag{display:inline-block;margin-left:6px;font-size:10.5px;padding:1px 7px;border-radius:999px;font-weight:600;white-space:nowrap}
+#userTbody .fa-si{background:#e3efe6;color:#2f6b45}
+#userTbody .fa-no{background:#f6e0d6;color:#9a3f1f}
+#userStats .fa-res{flex:1 1 100%;font-size:12.5px;color:var(--ink-soft);display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
+#userStats .fa-res b{color:var(--ink)}
+#userStats .fa-res .fa-bar{display:inline-block;width:120px;height:6px;border-radius:3px;background:#f6e0d6;overflow:hidden;vertical-align:middle}
+#userStats .fa-res .fa-bar i{display:block;height:100%;background:#4f8a63}
+</style>
+<script id="semah-2fa-js">
+(() => {
+  // NexoIT guarda en "estado_2fa" lo que envía cada consola (Haus y Semah) desde su Apps Script, cada 6 horas.
+  const g = (n) => { try { return eval(n); } catch (e) { return undefined; } };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const S = { mapa: null, consolas: {}, cargado: false };
+  const hace = (iso) => { const m = Math.round((Date.now() - Date.parse(iso)) / 60000); if (!(m >= 0)) return ''; if (m < 60) return `hace ${m} min`; const h = Math.round(m / 60); return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`; };
+
+  async function cargar() {
+    const St = g('Storage'); if (!St) return;
+    let v = null; try { v = await St.get('estado_2fa', null); } catch (e) {} try { delete window.__ver.estado_2fa; } catch (e) {}
+    const mapa = new Map(); S.consolas = (v && v.consolas) || {};
+    Object.entries(S.consolas).forEach(([con, d]) => (d.cuentas || []).forEach((c) => { const x = { ...c, consola: con }; mapa.set(c.correo, x); (c.alias || []).forEach((a) => { if (!mapa.has(a)) mapa.set(a, x); }); }));
+    S.mapa = mapa; S.cargado = true; pintar();
+  }
+  const de = (u) => S.mapa && u && u.correo ? S.mapa.get(String(u.correo).toLowerCase()) : null;
+  window.__estado2fa = de;   // para otros bloques (filtros, Monitor)
+
+  function resumen() {
+    const box = document.getElementById('userStats'); if (!box || !S.cargado || !Object.keys(S.consolas).length) return;
+    box.querySelector('.fa-res')?.remove();
+    const partes = Object.entries(S.consolas).map(([con, d]) => {
+      const act = (d.cuentas || []).filter((c) => !c.suspendida && !c.archivada), si = act.filter((c) => c.inscrito).length;
+      return { con, act: act.length, si, cuando: d.actualizado };
+    });
+    const T = partes.reduce((a, p) => ({ act: a.act + p.act, si: a.si + p.si }), { act: 0, si: 0 });
+    const d = document.createElement('div'); d.className = 'fa-res';
+    d.innerHTML = `<span>Doble factor en Google: <b>${T.si} de ${T.act}</b> cuentas activas <span class="fa-bar"><i style="width:${T.act ? Math.round(T.si / T.act * 100) : 0}%"></i></span></span>` +
+      partes.map((p) => `<span>${esc(p.con)}: ${p.si}/${p.act} · faltan <b>${p.act - p.si}</b> · leído ${esc(hace(p.cuando))}</span>`).join('');
+    const tot = box.querySelector('.us-tot'); if (tot) tot.after(d); else box.appendChild(d);
+  }
+
+  function marcar() {
+    if (!S.cargado) return;
+    const us = g('usuarios') || [];
+    document.querySelectorAll('#userTbody button[onclick^="editUser("]').forEach((b) => {
+      const id = (b.getAttribute('onclick').match(/editUser\('([^']+)'\)/) || [])[1]; const u = us.find((x) => x.id === id); if (!u) return;
+      const td = b.closest('tr').children[3]; if (!td || td.querySelector('.fa-tag')) return;
+      const e = de(u); if (!e || e.suspendida) return;
+      const t = document.createElement('span');
+      t.className = 'fa-tag ' + (e.inscrito ? 'fa-si' : 'fa-no');
+      t.textContent = e.inscrito ? '2FA ✓' : 'Sin 2FA';
+      t.title = (e.inscrito ? 'Verificación en 2 pasos activa' : 'No tiene la verificación en 2 pasos') + ` · consola ${e.consola}` + (e.obligatorio ? ' · obligatoria' : '') + (e.ultimoAcceso ? ` · último acceso ${new Date(e.ultimoAcceso).toLocaleDateString('es-PA')}` : '');
+      td.appendChild(t);
+    });
+  }
+  function pintar() { try { resumen(); marcar(); } catch (e) { console.warn(e); } }
+
+  // filtro "Sin doble factor" en la lista de licencias de Usuarios
+  function filtro() {
+    const s = document.getElementById('userLicFilter'); if (!s || s.querySelector('option[value="sin2fa"]')) return;
+    const o = document.createElement('option'); o.value = 'sin2fa'; o.textContent = 'Sin doble factor (Google)'; s.appendChild(o);
+  }
+  function envolver() {
+    const f = window.renderUserTable; if (typeof f !== 'function' || f.__fa) return;
+    const w = function () {
+      const s = document.getElementById('userLicFilter');
+      if (s && s.value === 'sin2fa') {        // muestra solo las cuentas sin doble factor
+        s.value = ''; const r = f.apply(this, arguments); s.value = 'sin2fa';
+        const us = g('usuarios') || [];
+        document.querySelectorAll('#userTbody tr').forEach((tr) => {
+          const b = tr.querySelector('button[onclick^="editUser("]'); if (!b) return;
+          const id = (b.getAttribute('onclick').match(/editUser\('([^']+)'\)/) || [])[1]; const e = de(us.find((x) => x.id === id));
+          if (!e || e.inscrito || e.suspendida) tr.remove();
+        });
+        pintar(); return r;
+      }
+      const r = f.apply(this, arguments); pintar(); return r;
+    };
+    w.__fa = true; window.renderUserTable = w;
+    const st = window.renderUserStats; if (typeof st === 'function' && !st.__fa) { const w2 = function () { const r = st.apply(this, arguments); pintar(); return r; }; w2.__fa = true; window.renderUserStats = w2; }
+  }
+  const arrancar = () => {
+    filtro(); envolver(); setTimeout(() => cargar().catch(() => {}), 3500);
+    const box = document.getElementById('userStats');   // otros bloques redibujan el encabezado: volver a poner el resumen
+    if (box) new MutationObserver(() => { if (S.cargado && !box.querySelector('.fa-res')) resumen(); }).observe(box, { childList: true });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(arrancar, 80)); else setTimeout(arrancar, 80);
+  document.addEventListener('click', (e) => { const t = e.target.closest('.tab'); if (t && t.dataset.view === 'usuarios') cargar().catch(() => {}); });
+})();
+</script>
 </body>
 </html>
